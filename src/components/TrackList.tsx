@@ -17,6 +17,7 @@ interface TrackListProps {
   onAddToFavorites?: (track: Track) => void;
   currentTrackId?: string;
   title?: string;
+  formatDuration?: (seconds: number) => string;
 }
 
 const TrackList: React.FC<TrackListProps> = ({ 
@@ -24,13 +25,16 @@ const TrackList: React.FC<TrackListProps> = ({
   onTrackSelect,
   onAddToFavorites,
   currentTrackId,
-  title = "Titres populaires"
+  title = "Titres populaires",
+  formatDuration
 }) => {
-  const formatDuration = (seconds: number): string => {
+  const defaultFormatDuration = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
   };
+  
+  const formatTime = formatDuration || defaultFormatDuration;
   
   return (
     <div className="bg-muted/20 rounded-xl border border-primary/20 p-4 backdrop-blur-sm">
@@ -66,7 +70,7 @@ const TrackList: React.FC<TrackListProps> = ({
               
               <div className="flex items-center space-x-2">
                 <span className="text-xs text-muted-foreground">
-                  {formatDuration(track.duration)}
+                  {formatTime(track.duration)}
                 </span>
                 
                 {onAddToFavorites && (
