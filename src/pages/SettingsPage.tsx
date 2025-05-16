@@ -1,19 +1,21 @@
 
-import React, { useState } from 'react';
-import { Check, Cloud, Download, GitFork, Globe, HardDrive, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Cloud, Download, Info, HardDrive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from '@/components/ui/separator';
 import { toast } from "@/hooks/use-toast";
+import AuthForm from '@/components/AuthForm';
 
 const SettingsPage: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   // Theme settings
   const [currentTheme, setCurrentTheme] = useState<string>('violet');
   const [offlineMode, setOfflineMode] = useState<boolean>(false);
   const [downloadEnabled, setDownloadEnabled] = useState<boolean>(true);
-  const [currentSource, setCurrentSource] = useState<string>('youtube');
+  const [currentInstance, setCurrentInstance] = useState<string>('auto');
   
   // Theme options
   const themes = [
@@ -22,30 +24,83 @@ const SettingsPage: React.FC = () => {
     { id: 'green', name: 'Mode Hacker', description: 'Style terminal avec effets verts' },
   ];
   
-  // Music sources
-  const sources = [
-    { id: 'youtube', name: 'YouTube', description: 'Via youtube-dl (sans compte)' },
-    { id: 'soundcloud', name: 'SoundCloud', description: 'Via API publique' },
-    { id: 'jamendo', name: 'Jamendo', description: 'Musiques libres de droits' },
-    { id: 'spotify', name: 'Spotify', description: 'Nécessite un compte premium', disabled: true },
+  // Invidious instances
+  const instances = [
+    { id: 'auto', name: 'Automatique', description: 'L\'application choisit la meilleure instance' },
+    { id: 'invidious.fdn.fr', name: 'invidious.fdn.fr', description: 'Instance française' },
+    { id: 'y.com.sb', name: 'y.com.sb', description: 'Instance rapide' },
+    { id: 'invidious.slipfox.xyz', name: 'invidious.slipfox.xyz', description: 'Instance alternative 1' },
+    { id: 'invidious.privacydev.net', name: 'invidious.privacydev.net', description: 'Instance alternative 2' },
   ];
+  
+  // Vérifier l'authentification et charger les paramètres
+  useEffect(() => {
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        setIsAuthenticated(!!parsed.pin);
+        
+        // Charger les paramètres utilisateur
+        if (parsed.settings) {
+          setCurrentTheme(parsed.settings.theme || 'violet');
+          setOfflineMode(parsed.settings.offlineMode || false);
+          setDownloadEnabled(parsed.settings.downloadEnabled || true);
+          setCurrentInstance(parsed.settings.instance || 'auto');
+        }
+      } catch (e) {
+        console.error("Error loading user settings:", e);
+      }
+    }
+  }, []);
+  
+  const handleAuthComplete = () => {
+    setIsAuthenticated(true);
+    // Recharger les paramètres après l'authentification
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        if (parsed.settings) {
+          setCurrentTheme(parsed.settings.theme || 'violet');
+          setOfflineMode(parsed.settings.offlineMode || false);
+          setDownloadEnabled(parsed.settings.downloadEnabled || true);
+          setCurrentInstance(parsed.settings.instance || 'auto');
+        }
+      } catch (e) {
+        console.error("Error loading user settings:", e);
+      }
+    }
+  };
   
   // Handle theme change
   const handleThemeChange = (themeId: string) => {
     setCurrentTheme(themeId);
+    
+    // Apply theme immediately
+    document.documentElement.classList.remove('theme-violet', 'theme-blue', 'theme-green');
+    document.documentElement.classList.add(`theme-${themeId}`);
+    
+    // Save to user settings
+    saveSettings({ theme: themeId });
+    
     toast({
       title: "Thème modifié",
-      description: "Le thème sera appliqué au prochain démarrage",
+      description: `Le thème "${themes.find(t => t.id === themeId)?.name}" a été appliqué`,
       duration: 3000,
     });
   };
   
-  // Handle source change
-  const handleSourceChange = (sourceId: string) => {
-    setCurrentSource(sourceId);
+  // Handle instance change
+  const handleInstanceChange = (instanceId: string) => {
+    setCurrentInstance(instanceId);
+    
+    // Save to user settings
+    saveSettings({ instance: instanceId });
+    
     toast({
-      title: "Source modifiée",
-      description: "La recherche utilisera maintenant " + sources.find(s => s.id === sourceId)?.name,
+      title: "Instance modifiée",
+      description: `L'instance Invidious a été changée pour "${instanceId}"`,
       duration: 3000,
     });
   };
@@ -53,6 +108,10 @@ const SettingsPage: React.FC = () => {
   // Handle offline toggle
   const handleOfflineModeToggle = (checked: boolean) => {
     setOfflineMode(checked);
+    
+    // Save to user settings
+    saveSettings({ offlineMode: checked });
+    
     toast({
       title: checked ? "Mode hors-ligne activé" : "Mode hors-ligne désactivé",
       description: checked 
@@ -62,13 +121,22 @@ const SettingsPage: React.FC = () => {
     });
   };
   
+  // Save settings helper
+  const saveSettings = (newSettings: any) => {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    userData.settings = {
+      ...(userData.settings || {}),
+      ...newSettings
+    };
+    localStorage.setItem('userData', JSON.stringify(userData));
+  };
+  
   // Export settings
   const handleExportSettings = () => {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    
     const settings = {
-      theme: currentTheme,
-      offlineMode,
-      downloadEnabled,
-      source: currentSource,
+      ...userData,
       exportDate: new Date().toISOString(),
       appVersion: "1.0.0"
     };
@@ -90,6 +158,19 @@ const SettingsPage: React.FC = () => {
       duration: 3000,
     });
   };
+  
+  if (!isAuthenticated) {
+    return (
+      <div className="py-10 px-4">
+        <div className="max-w-screen-md mx-auto">
+          <h1 className="font-audiowide text-3xl mb-8 glow text-primary-foreground text-center">
+            Paramètres - NeonWave
+          </h1>
+          <AuthForm onAuthComplete={handleAuthComplete} />
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="py-4 px-4">
@@ -134,34 +215,33 @@ const SettingsPage: React.FC = () => {
             </RadioGroup>
           </div>
           
-          {/* Music Sources */}
+          {/* Invidious Instances */}
           <div className="bg-muted/20 rounded-xl border border-primary/20 p-6 backdrop-blur-sm">
             <h2 className="text-xl font-audiowide mb-4 glow-blue text-electricBlue">
-              Sources musicales
+              Instances Invidious
             </h2>
             
             <RadioGroup 
-              value={currentSource}
-              onValueChange={handleSourceChange}
+              value={currentInstance}
+              onValueChange={handleInstanceChange}
               className="grid gap-4"
             >
-              {sources.map(source => (
-                <div key={source.id} className={source.disabled ? "opacity-50" : ""}>
+              {instances.map(instance => (
+                <div key={instance.id}>
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem 
-                      value={source.id} 
-                      id={source.id} 
-                      disabled={source.disabled}
+                      value={instance.id} 
+                      id={instance.id}
                     />
                     <Label 
-                      htmlFor={source.id} 
+                      htmlFor={instance.id} 
                       className="font-medium cursor-pointer"
                     >
-                      {source.name}
+                      {instance.name}
                     </Label>
                   </div>
                   <p className="text-xs text-muted-foreground ml-6 mt-1">
-                    {source.description}
+                    {instance.description}
                   </p>
                 </div>
               ))}
@@ -211,7 +291,10 @@ const SettingsPage: React.FC = () => {
                 <Switch 
                   id="download-enabled" 
                   checked={downloadEnabled} 
-                  onCheckedChange={setDownloadEnabled}
+                  onCheckedChange={(checked) => {
+                    setDownloadEnabled(checked);
+                    saveSettings({ downloadEnabled: checked });
+                  }}
                 />
               </div>
             </div>
@@ -231,11 +314,56 @@ const SettingsPage: React.FC = () => {
                 variant="outline"
                 className="w-full"
                 onClick={() => {
-                  toast({
-                    title: "Importation",
-                    description: "Fonctionnalité à venir dans la prochaine version",
-                    duration: 3000,
-                  });
+                  const fileInput = document.createElement("input");
+                  fileInput.type = "file";
+                  fileInput.accept = ".json";
+                  fileInput.onchange = (e: any) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        try {
+                          const importedData = JSON.parse(event.target?.result as string);
+                          
+                          if (importedData.settings) {
+                            // Demander confirmation
+                            if (confirm("Voulez-vous importer ces paramètres ? Cela remplacera vos paramètres actuels.")) {
+                              localStorage.setItem('userData', JSON.stringify(importedData));
+                              
+                              // Appliquer les paramètres importés
+                              setCurrentTheme(importedData.settings.theme || 'violet');
+                              setOfflineMode(importedData.settings.offlineMode || false);
+                              setDownloadEnabled(importedData.settings.downloadEnabled || true);
+                              setCurrentInstance(importedData.settings.instance || 'auto');
+                              
+                              toast({
+                                title: "Paramètres importés",
+                                description: "Vos paramètres ont été mis à jour",
+                                duration: 3000,
+                              });
+                            }
+                          } else {
+                            toast({
+                              title: "Format invalide",
+                              description: "Le fichier ne contient pas de paramètres valides",
+                              variant: "destructive",
+                              duration: 3000,
+                            });
+                          }
+                        } catch (e) {
+                          console.error("Error importing settings:", e);
+                          toast({
+                            title: "Erreur d'importation",
+                            description: "Le fichier n'est pas un JSON valide",
+                            variant: "destructive",
+                            duration: 3000,
+                          });
+                        }
+                      };
+                      reader.readAsText(file);
+                    }
+                  };
+                  fileInput.click();
                 }}
               >
                 Importer des paramètres
@@ -245,11 +373,19 @@ const SettingsPage: React.FC = () => {
                 variant="destructive"
                 className="w-full"
                 onClick={() => {
-                  toast({
-                    title: "Suppression",
-                    description: "Données locales effacées avec succès",
-                    duration: 3000,
-                  });
+                  if (confirm("Êtes-vous sûr de vouloir supprimer toutes vos données ? Cette action est irréversible.")) {
+                    localStorage.clear();
+                    toast({
+                      title: "Données supprimées",
+                      description: "Toutes les données locales ont été effacées",
+                      duration: 3000,
+                    });
+                    
+                    // Rediriger vers l'écran d'authentification
+                    setTimeout(() => {
+                      window.location.reload();
+                    }, 1500);
+                  }
                 }}
               >
                 Supprimer toutes les données locales

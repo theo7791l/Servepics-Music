@@ -1,132 +1,257 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PlaylistCard from '@/components/PlaylistCard';
 import TrackList from '@/components/TrackList';
 import MusicPlayer from '@/components/MusicPlayer';
+import AuthForm from '@/components/AuthForm';
 import { PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 
-// Mock data
-const mockPlaylists = [
-  { 
-    id: '1', 
-    name: 'Mes favoris', 
-    trackCount: 12, 
-    coverUrl: 'https://images.unsplash.com/photo-1494232410401-ad00d5433cfa?w=400&h=400&auto=format&fit=crop' 
-  },
-  { 
-    id: '2', 
-    name: 'Cyberpunk vibes', 
-    trackCount: 8, 
-    coverUrl: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=400&h=400&auto=format&fit=crop' 
-  },
-  { 
-    id: '3', 
-    name: 'Coding sessions', 
-    trackCount: 15, 
-    coverUrl: 'https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=400&h=400&auto=format&fit=crop' 
-  },
-  { 
-    id: '4', 
-    name: 'Gaming soundtrack', 
-    trackCount: 21, 
-    coverUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&h=400&auto=format&fit=crop'
-  },
-];
+interface Playlist {
+  id: string;
+  name: string;
+  trackCount: number;
+  coverUrl?: string;
+  tracks: Track[];
+}
 
-const playlistTracks = {
-  '1': [
-    {
-      id: '101',
-      title: 'Night Drive',
-      artist: 'Synthwave Collective',
-      coverUrl: 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=400&h=400&auto=format&fit=crop',
-      audioUrl: 'https://cdn.pixabay.com/audio/2022/01/18/audio_7fc51f063f.mp3',
-      duration: 185
-    },
-    {
-      id: '102',
-      title: 'Retrowave Dreams',
-      artist: 'Glitch Protocol',
-      coverUrl: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=400&h=400&auto=format&fit=crop',
-      audioUrl: 'https://cdn.pixabay.com/audio/2022/03/10/audio_270f4304ce.mp3',
-      duration: 214
-    },
-  ],
-  '2': [
-    {
-      id: '201',
-      title: 'Neon City',
-      artist: 'Digital Wave',
-      coverUrl: 'https://images.unsplash.com/photo-1614149162883-504ce46d2aad?w=400&h=400&auto=format&fit=crop',
-      audioUrl: 'https://cdn.pixabay.com/audio/2023/06/13/audio_5edf1c6320.mp3',
-      duration: 240
-    },
-  ],
-  '3': [],
-  '4': [
-    {
-      id: '401',
-      title: 'Boss Battle',
-      artist: 'Game OST',
-      coverUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&h=400&auto=format&fit=crop',
-      audioUrl: 'https://cdn.pixabay.com/audio/2022/10/25/audio_946df2456a.mp3',
-      duration: 192
-    },
-  ],
-};
+interface Track {
+  id: string;
+  title: string;
+  artist: string;
+  coverUrl: string;
+  audioUrl: string;
+  duration: number;
+  videoId?: string;
+}
 
 const PlaylistsPage: React.FC = () => {
-  const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
-  const [playlistContent, setPlaylistContent] = useState<any[]>([]);
-  const [currentTrack, setCurrentTrack] = useState<any>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState<boolean>(false);
+  const [newPlaylistName, setNewPlaylistName] = useState<string>("");
+  
+  // Vérifier l'authentification et charger les playlists
+  useEffect(() => {
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        setIsAuthenticated(!!parsed.pin);
+        if (parsed.playlists) {
+          setPlaylists(parsed.playlists);
+        }
+        
+        // Charger le morceau en cours s'il existe
+        const savedTrack = localStorage.getItem('currentTrack');
+        if (savedTrack) {
+          setCurrentTrack(JSON.parse(savedTrack));
+        }
+      } catch (e) {
+        console.error("Error loading user data:", e);
+      }
+    }
+  }, []);
+  
+  const handleAuthComplete = () => {
+    setIsAuthenticated(true);
+    // Recharger les playlists après l'authentification
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      const parsed = JSON.parse(userData);
+      if (parsed.playlists) {
+        setPlaylists(parsed.playlists);
+      }
+    }
+  };
   
   const handlePlaylistClick = (playlist: any) => {
     setSelectedPlaylist(playlist);
-    // @ts-ignore - Just for demo purposes
-    const tracks = playlistTracks[playlist.id] || [];
-    setPlaylistContent(tracks);
-    setCurrentTrack(null);
   };
   
-  const handleTrackSelect = (track: any) => {
-    setCurrentTrack(track);
+  const handleTrackSelect = async (track: Track) => {
+    // Si le morceau a déjà une URL audio, le lire directement
+    if (track.audioUrl) {
+      setCurrentTrack(track);
+      localStorage.setItem('currentTrack', JSON.stringify(track));
+      return;
+    }
+    
+    // Sinon, récupérer l'URL audio via Invidious (si videoId est disponible)
+    if (track.videoId) {
+      try {
+        const invidiousInstances = [
+          'https://invidious.fdn.fr',
+          'https://y.com.sb',
+          'https://invidious.slipfox.xyz',
+          'https://invidious.privacydev.net'
+        ];
+        
+        // Essayer chaque instance jusqu'à ce qu'une fonctionne
+        for (const instance of invidiousInstances) {
+          try {
+            const url = `${instance}/api/v1/videos/${track.videoId}`;
+            const response = await fetch(url, { mode: 'cors' });
+            
+            if (!response.ok) {
+              throw new Error(`API returned status ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Trouver le format audio uniquement avec la meilleure qualité
+            const audioFormats = data.adaptiveFormats
+              .filter((format: any) => format.type.startsWith('audio/'))
+              .sort((a: any, b: any) => b.bitrate - a.bitrate);
+            
+            if (audioFormats.length > 0) {
+              const audioTrack = {
+                ...track,
+                audioUrl: audioFormats[0].url,
+                title: data.title || track.title,
+                artist: data.author || track.artist,
+                duration: data.lengthSeconds || track.duration,
+                // Utiliser une miniature de meilleure qualité si disponible
+                coverUrl: data.videoThumbnails?.find((t: any) => t.quality === 'maxres')?.url || 
+                        data.videoThumbnails?.find((t: any) => t.quality === 'high')?.url || 
+                        track.coverUrl
+              };
+              
+              // Mettre à jour le morceau dans la playlist
+              if (selectedPlaylist) {
+                const updatedPlaylist = { ...selectedPlaylist };
+                const trackIndex = updatedPlaylist.tracks.findIndex(t => t.id === track.id);
+                if (trackIndex !== -1) {
+                  updatedPlaylist.tracks[trackIndex] = audioTrack;
+                  setSelectedPlaylist(updatedPlaylist);
+                  
+                  // Mettre à jour dans le stockage local
+                  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+                  const playlistIndex = userData.playlists.findIndex((p: Playlist) => p.id === selectedPlaylist.id);
+                  if (playlistIndex !== -1) {
+                    userData.playlists[playlistIndex] = updatedPlaylist;
+                    localStorage.setItem('userData', JSON.stringify(userData));
+                  }
+                }
+              }
+              
+              // Stocker dans localStorage pour la persistance
+              setCurrentTrack(audioTrack);
+              localStorage.setItem('currentTrack', JSON.stringify(audioTrack));
+              return;
+            } else {
+              throw new Error("No audio formats found");
+            }
+          } catch (err) {
+            console.error(`Failed to get video details from ${instance}:`, err);
+            // Continuer avec l'instance suivante
+          }
+        }
+        
+        // Si toutes les instances ont échoué
+        throw new Error("All instances failed");
+      } catch (err) {
+        toast({
+          title: "Erreur de lecture",
+          description: "Impossible de lire ce titre pour le moment",
+          variant: "destructive",
+          duration: 3000,
+        });
+        console.error("Failed to get audio URL:", err);
+      }
+    } else {
+      toast({
+        title: "Erreur de lecture",
+        description: "Information vidéo manquante",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
   };
   
   const handleNextTrack = () => {
-    if (!currentTrack || playlistContent.length === 0) return;
+    if (!currentTrack || !selectedPlaylist || selectedPlaylist.tracks.length === 0) return;
     
-    const currentIndex = playlistContent.findIndex(track => track.id === currentTrack.id);
-    const nextIndex = (currentIndex + 1) % playlistContent.length;
-    setCurrentTrack(playlistContent[nextIndex]);
+    const currentIndex = selectedPlaylist.tracks.findIndex(track => track.id === currentTrack.id);
+    const nextIndex = (currentIndex + 1) % selectedPlaylist.tracks.length;
+    handleTrackSelect(selectedPlaylist.tracks[nextIndex]);
   };
   
   const handlePreviousTrack = () => {
-    if (!currentTrack || playlistContent.length === 0) return;
+    if (!currentTrack || !selectedPlaylist || selectedPlaylist.tracks.length === 0) return;
     
-    const currentIndex = playlistContent.findIndex(track => track.id === currentTrack.id);
-    const prevIndex = (currentIndex - 1 + playlistContent.length) % playlistContent.length;
-    setCurrentTrack(playlistContent[prevIndex]);
+    const currentIndex = selectedPlaylist.tracks.findIndex(track => track.id === currentTrack.id);
+    const prevIndex = (currentIndex - 1 + selectedPlaylist.tracks.length) % selectedPlaylist.tracks.length;
+    handleTrackSelect(selectedPlaylist.tracks[prevIndex]);
   };
   
-  const handleCreateNewPlaylist = () => {
+  const handleCreatePlaylist = () => {
+    if (!newPlaylistName.trim()) {
+      toast({
+        title: "Nom requis",
+        description: "Veuillez entrer un nom pour la playlist",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+    
+    // Créer une nouvelle playlist
+    const newPlaylist: Playlist = {
+      id: Date.now().toString(),
+      name: newPlaylistName,
+      trackCount: 0,
+      tracks: [],
+      coverUrl: "https://images.unsplash.com/photo-1494232410401-ad00d5433cfa?w=400&h=400&auto=format&fit=crop"
+    };
+    
+    // Mettre à jour l'état local
+    const updatedPlaylists = [...playlists, newPlaylist];
+    setPlaylists(updatedPlaylists);
+    
+    // Mettre à jour le stockage local
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    userData.playlists = updatedPlaylists;
+    localStorage.setItem('userData', JSON.stringify(userData));
+    
+    // Fermer la boîte de dialogue et réinitialiser le formulaire
+    setIsCreateDialogOpen(false);
+    setNewPlaylistName("");
+    
     toast({
-      title: "Nouvelle playlist",
-      description: "Fonctionnalité à venir dans la prochaine version",
+      title: "Playlist créée",
+      description: `La playlist "${newPlaylistName}" a été créée`,
       duration: 3000,
     });
   };
   
+  if (!isAuthenticated) {
+    return (
+      <div className="py-10 px-4">
+        <div className="max-w-screen-md mx-auto">
+          <h1 className="font-audiowide text-3xl mb-8 glow text-primary-foreground text-center">
+            Bienvenue sur NeonWave
+          </h1>
+          <AuthForm onAuthComplete={handleAuthComplete} />
+        </div>
+      </div>
+    );
+  }
+  
   return (
-    <div className="py-4 px-4">
+    <div className="py-4 px-4 pb-20">
       <div className="max-w-screen-xl mx-auto">
         <div className="mb-6 flex justify-between items-center">
           <h1 className="font-audiowide text-3xl glow text-primary-foreground">
             Playlists
           </h1>
           <Button 
-            onClick={handleCreateNewPlaylist}
+            onClick={() => setIsCreateDialogOpen(true)}
             className="btn-glow-blue bg-secondary text-secondary-foreground hover:bg-secondary/80"
           >
             <PlusCircle size={16} className="mr-2" />
@@ -167,44 +292,106 @@ const PlaylistsPage: React.FC = () => {
                     {selectedPlaylist.name}
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    {selectedPlaylist.trackCount} {selectedPlaylist.trackCount === 1 ? 'titre' : 'titres'}
+                    {selectedPlaylist.tracks?.length || 0} {selectedPlaylist.tracks?.length === 1 ? 'titre' : 'titres'}
                   </p>
                 </div>
               </div>
               
-              <TrackList 
-                tracks={playlistContent} 
-                onTrackSelect={handleTrackSelect}
-                currentTrackId={currentTrack?.id}
-                title={`Titres dans ${selectedPlaylist.name}`}
-              />
+              {selectedPlaylist.tracks?.length > 0 ? (
+                <TrackList 
+                  tracks={selectedPlaylist.tracks} 
+                  onTrackSelect={handleTrackSelect}
+                  currentTrackId={currentTrack?.id}
+                  title={`Titres dans ${selectedPlaylist.name}`}
+                />
+              ) : (
+                <div className="bg-muted/20 rounded-xl border border-primary/20 p-8 text-center backdrop-blur-sm">
+                  <p className="text-lg text-muted-foreground mb-2">Playlist vide</p>
+                  <p className="text-sm text-muted-foreground">
+                    Ajoutez des titres depuis la recherche
+                  </p>
+                </div>
+              )}
             </div>
           </>
         ) : (
           <>
             {/* List of playlists */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
-              {mockPlaylists.map(playlist => (
-                <PlaylistCard 
-                  key={playlist.id} 
-                  playlist={playlist} 
-                  onClick={handlePlaylistClick}
-                />
-              ))}
-            </div>
+            {playlists && playlists.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
+                {playlists.map(playlist => (
+                  <PlaylistCard 
+                    key={playlist.id} 
+                    playlist={{
+                      ...playlist,
+                      trackCount: playlist.tracks?.length || 0
+                    }} 
+                    onClick={handlePlaylistClick}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-muted/20 rounded-xl border border-primary/20 p-8 text-center backdrop-blur-sm">
+                <p className="text-lg text-muted-foreground mb-2">Aucune playlist</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Créez votre première playlist pour commencer
+                </p>
+                <Button 
+                  onClick={() => setIsCreateDialogOpen(true)}
+                  className="btn-glow-blue"
+                >
+                  <PlusCircle size={16} className="mr-2" />
+                  Créer une playlist
+                </Button>
+              </div>
+            )}
           </>
         )}
         
         {/* Player */}
         {currentTrack && (
-          <div className="sticky bottom-16 md:bottom-4 pt-4 pb-2 bg-gradient-to-t from-background to-transparent z-10">
-            <MusicPlayer 
-              currentTrack={currentTrack} 
-              onNext={handleNextTrack}
-              onPrevious={handlePreviousTrack}
-            />
+          <div className="fixed left-0 right-0 bottom-16 md:bottom-4 pt-4 pb-2 px-4 bg-gradient-to-t from-background to-transparent z-10">
+            <div className="max-w-screen-xl mx-auto">
+              <MusicPlayer 
+                currentTrack={currentTrack} 
+                onNext={handleNextTrack}
+                onPrevious={handlePreviousTrack}
+              />
+            </div>
           </div>
         )}
+        
+        {/* Dialog for creating new playlist */}
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-audiowide text-xl">Créer une nouvelle playlist</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Input
+                  placeholder="Nom de la playlist"
+                  value={newPlaylistName}
+                  onChange={(e) => setNewPlaylistName(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={handleCreatePlaylist}
+                className="btn-glow-blue"
+              >
+                Créer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

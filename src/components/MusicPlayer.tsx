@@ -10,6 +10,7 @@ interface Track {
   coverUrl: string;
   audioUrl: string;
   duration: number;
+  videoId?: string;
 }
 
 interface MusicPlayerProps {
@@ -28,6 +29,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const [volume, setVolume] = useState(80);
   const [isShuffle, setIsShuffle] = useState(false);
   const [isRepeat, setIsRepeat] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -36,12 +38,20 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     // Setup audio element if it doesn't exist
     if (!audioRef.current) {
       audioRef.current = new Audio();
+      
+      // Add error listener
+      audioRef.current.addEventListener('error', (e) => {
+        console.error('Audio playback error:', e);
+        setAudioError("Erreur de lecture audio. Essayez un autre titre.");
+        setIsPlaying(false);
+      });
     }
     
     // Update audio source when track changes
-    if (currentTrack) {
+    if (currentTrack && currentTrack.audioUrl) {
       audioRef.current.src = currentTrack.audioUrl;
       audioRef.current.volume = volume / 100;
+      setAudioError(null);
       
       // Auto-play new track
       audioRef.current.play()
@@ -49,6 +59,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         .catch(error => {
           console.error("Playback failed:", error);
           setIsPlaying(false);
+          setAudioError("Impossible de lire ce titre. L'URL audio est peut-être expirée.");
         });
     }
     
@@ -102,12 +113,23 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   }, [volume]);
   
   const togglePlay = () => {
-    if (!currentTrack) return;
+    if (!currentTrack || !currentTrack.audioUrl) return;
     
     if (isPlaying) {
       audioRef.current?.pause();
     } else {
-      audioRef.current?.play();
+      const playPromise = audioRef.current?.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setAudioError(null);
+          })
+          .catch(error => {
+            console.error("Playback failed:", error);
+            setAudioError("Erreur lors de la lecture. Essayez de recharger la page.");
+          });
+      }
     }
     
     setIsPlaying(!isPlaying);
@@ -171,6 +193,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   
   return (
     <div className="relative bg-muted/20 rounded-xl border border-primary/20 p-4 backdrop-blur-sm">
+      {audioError && (
+        <div className="absolute top-0 left-0 right-0 bg-destructive/80 text-white text-center py-1 text-xs rounded-t-xl">
+          {audioError}
+        </div>
+      )}
+      
       <div className="flex flex-col md:flex-row items-center gap-4">
         {/* Album Cover */}
         <div className="relative min-w-[100px] min-h-[100px]">
@@ -183,8 +211,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         
         {/* Track Info */}
         <div className="flex flex-col items-center md:items-start">
-          <h3 className="text-lg font-audiowide glow text-primary-foreground">{currentTrack.title}</h3>
-          <p className="text-sm text-secondary">{currentTrack.artist}</p>
+          <h3 className="text-lg font-audiowide glow text-primary-foreground truncate max-w-[200px]">{currentTrack.title}</h3>
+          <p className="text-sm text-secondary truncate max-w-[200px]">{currentTrack.artist}</p>
         </div>
         
         {/* Player Controls */}
@@ -207,6 +235,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             <button 
               onClick={togglePlay}
               className="p-3 bg-primary rounded-full btn-glow text-primary-foreground hover:bg-primary/80 transition-all"
+              disabled={!currentTrack.audioUrl}
             >
               {isPlaying ? <Pause size={24} /> : <Play size={24} />}
             </button>

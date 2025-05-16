@@ -1,11 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import TrackList from '@/components/TrackList';
 import MusicPlayer from '@/components/MusicPlayer';
 import { toast } from "@/hooks/use-toast";
 
-// Types for Invidious API response
+// Types pour la réponse API Invidious
 interface InvidiousVideo {
   type: string;
   title: string;
@@ -29,9 +29,9 @@ interface InvidiousVideo {
   premium: boolean;
 }
 
-// Convert Invidious video to our app's track format
+// Converti un video Invidious en format track pour notre app
 const convertToTrack = (video: InvidiousVideo) => {
-  // Find the highest quality thumbnail
+  // Trouver la miniature de meilleure qualité
   const thumbnail = video.videoThumbnails?.find(t => t.quality === 'high') || 
                     video.videoThumbnails?.[0];
   
@@ -40,18 +40,26 @@ const convertToTrack = (video: InvidiousVideo) => {
     title: video.title,
     artist: video.author,
     coverUrl: thumbnail?.url || '',
-    audioUrl: '', // This will be fetched when playing
+    audioUrl: '', // Sera récupéré lors de la lecture
     duration: video.lengthSeconds,
     videoId: video.videoId
   };
 };
 
-// Format seconds to MM:SS
+// Format des secondes en MM:SS
 const formatDuration = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 };
+
+// Instances Invidious publiques et fonctionnelles
+const invidiousInstances = [
+  'https://invidious.fdn.fr',
+  'https://y.com.sb',
+  'https://invidious.slipfox.xyz',
+  'https://invidious.privacydev.net'
+];
 
 const SearchPage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -60,37 +68,31 @@ const SearchPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   
-  // Invidious API instances - we can rotate through these if one fails
-  const invidiousInstances = [
-    'https://invidious.snopyta.org',
-    'https://inv.riverside.rocks',
-    'https://invidio.us',
-    'https://vid.puffyan.us'
-  ];
-  
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
     setIsSearching(true);
     setError(null);
     
-    // Try each instance until one works
+    // Essayer chaque instance jusqu'à ce qu'une fonctionne
     let searchSuccess = false;
     
     for (const instance of invidiousInstances) {
       try {
+        console.log(`Trying search with instance: ${instance}`);
         const url = `${instance}/api/v1/search?q=${encodeURIComponent(query)}`;
-        const response = await fetch(url);
+        const response = await fetch(url, { mode: 'cors' });
         
         if (!response.ok) {
+          console.error(`API returned status ${response.status}`);
           throw new Error(`API returned status ${response.status}`);
         }
         
         const data = await response.json();
         
-        // Filter only video results (not playlists, channels, etc.)
+        // Filtrer uniquement les résultats vidéo (pas les playlists, chaînes, etc.)
         const videoResults = data.filter((item: InvidiousVideo) => item.type === "video");
         
-        // Convert to our app's track format
+        // Conversion en format track de notre app
         const tracks = videoResults.map(convertToTrack);
         
         setSearchResults(tracks);
@@ -103,20 +105,20 @@ const SearchPage: React.FC = () => {
           duration: 3000,
         });
         
-        break; // Exit the loop if successful
+        break; // Sortir de la boucle si succès
       } catch (err) {
         console.error(`Failed to search with instance ${instance}:`, err);
-        // Continue to the next instance
+        // Continuer avec l'instance suivante
       }
     }
     
-    // If all instances failed
+    // Si toutes les instances ont échoué
     if (!searchSuccess) {
       setIsSearching(false);
-      setError("Impossible de se connecter aux sources musicales. Veuillez réessayer plus tard.");
+      setError("Impossible de se connecter aux sources musicales. Vérifiez votre connexion et réessayez.");
       toast({
         title: "Erreur de recherche",
-        description: "Impossible de se connecter aux sources musicales",
+        description: "Connexion impossible aux sources musicales",
         variant: "destructive",
         duration: 5000,
       });
@@ -124,15 +126,16 @@ const SearchPage: React.FC = () => {
   };
   
   const handleTrackSelect = async (track: any) => {
-    // Before playing, we need to fetch the audio URL
+    // Avant de lire, nous devons récupérer l'URL audio
     setIsSearching(true);
     
     try {
-      // Try each instance until one works
+      // Essayer chaque instance jusqu'à ce qu'une fonctionne
       for (const instance of invidiousInstances) {
         try {
+          console.log(`Trying to get audio for video ${track.videoId} from instance: ${instance}`);
           const url = `${instance}/api/v1/videos/${track.videoId}`;
-          const response = await fetch(url);
+          const response = await fetch(url, { mode: 'cors' });
           
           if (!response.ok) {
             throw new Error(`API returned status ${response.status}`);
@@ -140,7 +143,7 @@ const SearchPage: React.FC = () => {
           
           const data = await response.json();
           
-          // Find audio-only format with highest quality
+          // Trouver le format audio uniquement avec la meilleure qualité
           const audioFormats = data.adaptiveFormats
             .filter((format: any) => format.type.startsWith('audio/'))
             .sort((a: any, b: any) => b.bitrate - a.bitrate);
@@ -152,25 +155,28 @@ const SearchPage: React.FC = () => {
               title: data.title,
               artist: data.author,
               duration: data.lengthSeconds,
-              // Use better quality thumbnail if available
+              // Utiliser une miniature de meilleure qualité si disponible
               coverUrl: data.videoThumbnails.find((t: any) => t.quality === 'maxres')?.url || 
-                       data.videoThumbnails.find((t: any) => t.quality === 'high')?.url || 
-                       track.coverUrl
+                      data.videoThumbnails.find((t: any) => t.quality === 'high')?.url || 
+                      track.coverUrl
             };
+            
+            // Stocker dans localStorage pour la persistance
+            localStorage.setItem('currentTrack', JSON.stringify(audioTrack));
             
             setCurrentTrack(audioTrack);
             setIsSearching(false);
-            return; // Success!
+            return; // Succès!
           } else {
             throw new Error("No audio formats found");
           }
         } catch (err) {
           console.error(`Failed to get video details from ${instance}:`, err);
-          // Continue to the next instance
+          // Continuer avec l'instance suivante
         }
       }
       
-      // If all instances failed
+      // Si toutes les instances ont échoué
       throw new Error("All instances failed");
     } catch (err) {
       setIsSearching(false);
@@ -200,13 +206,59 @@ const SearchPage: React.FC = () => {
     handleTrackSelect(searchResults[prevIndex]);
   };
   
+  // Récupérer le currentTrack du localStorage au chargement
+  useEffect(() => {
+    const savedTrack = localStorage.getItem('currentTrack');
+    if (savedTrack) {
+      try {
+        setCurrentTrack(JSON.parse(savedTrack));
+      } catch (e) {
+        console.error("Error parsing saved track:", e);
+      }
+    }
+  }, []);
+  
   const handleAddToFavorites = (track: any) => {
-    // This will be implemented with the playlist system
-    toast({
-      title: "Fonctionnalité à venir",
-      description: "L'ajout aux favoris sera disponible avec le système de playlists",
-      duration: 3000,
-    });
+    // Récupérer les playlists de l'utilisateur
+    const userData = JSON.parse(localStorage.getItem('userData') || '{"playlists":[]}');
+    
+    // Trouver ou créer la playlist "Favoris"
+    let favorisPlaylist = userData.playlists.find((p: any) => p.name === "Favoris");
+    
+    if (!favorisPlaylist) {
+      favorisPlaylist = {
+        id: Date.now().toString(),
+        name: "Favoris",
+        trackCount: 0,
+        coverUrl: track.coverUrl,
+        tracks: []
+      };
+      userData.playlists.push(favorisPlaylist);
+    }
+    
+    // Vérifier si le titre est déjà dans les favoris
+    const trackExists = favorisPlaylist.tracks.some((t: any) => t.id === track.id);
+    
+    if (!trackExists) {
+      // Ajouter le titre aux favoris
+      favorisPlaylist.tracks.push(track);
+      favorisPlaylist.trackCount = favorisPlaylist.tracks.length;
+      
+      // Mettre à jour le localStorage
+      localStorage.setItem('userData', JSON.stringify(userData));
+      
+      toast({
+        title: "Ajouté aux favoris",
+        description: `"${track.title}" a été ajouté à vos favoris`,
+        duration: 3000,
+      });
+    } else {
+      toast({
+        title: "Déjà dans les favoris",
+        description: `"${track.title}" est déjà dans vos favoris`,
+        duration: 3000,
+      });
+    }
   };
   
   return (
@@ -218,12 +270,12 @@ const SearchPage: React.FC = () => {
           </h1>
         </div>
         
-        {/* Search bar */}
+        {/* Barre de recherche */}
         <div className="mb-8">
           <SearchBar onSearch={handleSearch} isSearching={isSearching} />
         </div>
         
-        {/* Search Results */}
+        {/* Résultats de recherche */}
         <div className="mb-8">
           {isSearching ? (
             <div className="flex justify-center py-8">
