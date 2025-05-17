@@ -8,6 +8,7 @@ declare global {
       minimize: () => void;
       maximize: () => void;
       close: () => void;
+      updateDiscordPresence: (trackInfo: { title: string; artist: string }) => void;
       logAudio?: (message: string) => void;
     };
   }
