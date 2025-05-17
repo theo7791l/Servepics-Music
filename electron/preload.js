@@ -1,6 +1,16 @@
 
+const { ipcRenderer, contextBridge } = require('electron');
+
+// Expose protected methods that allow the renderer process to use
+// the ipcRenderer without exposing the entire object
+contextBridge.exposeInMainWorld('electron', {
+  minimize: () => ipcRenderer.send('app-minimize'),
+  maximize: () => ipcRenderer.send('app-maximize'),
+  close: () => ipcRenderer.send('app-close'),
+  updateDiscordPresence: (trackInfo) => ipcRenderer.send('update-presence', trackInfo)
+});
+
 // All of the Node.js APIs are available in the preload process.
-// Il a les mêmes restrictions de sandbox qu'une extension Chrome.
 window.addEventListener('DOMContentLoaded', () => {
   const replaceText = (selector, text) => {
     const element = document.getElementById(selector)

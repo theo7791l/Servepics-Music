@@ -10,6 +10,7 @@ import Navbar from "@/components/Navbar";
 import BackgroundParticles from "@/components/BackgroundParticles";
 import GlitchLoader from "@/components/GlitchLoader";
 import MusicPlayer from "@/components/MusicPlayer";
+import TitleBar from "@/components/TitleBar";
 
 import HomePage from "@/pages/HomePage";
 import SearchPage from "@/pages/SearchPage";
@@ -156,8 +157,11 @@ const App = () => {
             <GlitchLoader onComplete={() => setLoading(false)} />
           )}
           
+          {/* Title Bar for Desktop App */}
+          <TitleBar />
+          
           {/* Main App */}
-          <div className="min-h-screen flex flex-col md:flex-row overflow-hidden">
+          <div className="min-h-screen flex flex-col md:flex-row overflow-hidden pt-8">
             <BackgroundParticles />
             
             <BrowserRouter>
