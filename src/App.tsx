@@ -100,8 +100,7 @@ const App = () => {
         const parsed = JSON.parse(userData);
         if (parsed.settings?.theme) {
           setTheme(parsed.settings.theme);
-          document.documentElement.classList.remove('theme-violet', 'theme-blue', 'theme-green');
-          document.documentElement.classList.add(`theme-${parsed.settings.theme}`);
+          applyTheme(parsed.settings.theme);
         }
       } catch (e) {
         console.error("Error loading theme:", e);
@@ -113,8 +112,7 @@ const App = () => {
       const newTheme = event.detail;
       if (newTheme) {
         setTheme(newTheme);
-        document.documentElement.classList.remove('theme-violet', 'theme-blue', 'theme-green');
-        document.documentElement.classList.add(`theme-${newTheme}`);
+        applyTheme(newTheme);
       }
     }) as EventListener);
     
@@ -122,6 +120,47 @@ const App = () => {
       window.removeEventListener('themeChanged', (() => {}) as EventListener);
     };
   }, []);
+  
+  // Fonction pour appliquer le thème à tout le document
+  const applyTheme = (themeName: string) => {
+    // Supprimer toutes les classes de thème existantes
+    document.documentElement.classList.remove('theme-violet', 'theme-blue', 'theme-green', 'theme-hacker', 'theme-cyberpunk');
+    // Ajouter la nouvelle classe de thème
+    document.documentElement.classList.add(`theme-${themeName}`);
+    
+    // Appliquer des styles spécifiques en fonction du thème
+    const root = document.documentElement;
+    
+    switch (themeName) {
+      case 'violet':
+        root.style.setProperty('--primary-color', '#9b87f5');
+        root.style.setProperty('--secondary-color', '#7E69AB');
+        break;
+      case 'blue':
+        root.style.setProperty('--primary-color', '#0EA5E9');
+        root.style.setProperty('--secondary-color', '#1EAEDB');
+        break;
+      case 'green':
+        root.style.setProperty('--primary-color', '#10B981');
+        root.style.setProperty('--secondary-color', '#059669');
+        break;
+      case 'hacker':
+        root.style.setProperty('--primary-color', '#00FF41');
+        root.style.setProperty('--secondary-color', '#008F11');
+        root.style.setProperty('--background-color', '#0D0208');
+        root.style.setProperty('--text-color', '#00FF41');
+        break;
+      case 'cyberpunk':
+        root.style.setProperty('--primary-color', '#FF2A6D');
+        root.style.setProperty('--secondary-color', '#05D9E8');
+        root.style.setProperty('--background-color', '#121212');
+        root.style.setProperty('--text-color', '#FF2A6D');
+        break;
+      default:
+        root.style.setProperty('--primary-color', '#9b87f5');
+        root.style.setProperty('--secondary-color', '#7E69AB');
+    }
+  }
   
   // Handle next track
   const handleNextTrack = () => {
@@ -168,7 +207,16 @@ const App = () => {
         handleNextTrack,
         handlePreviousTrack,
         theme,
-        setTheme
+        setTheme: (newTheme) => {
+          setTheme(newTheme);
+          applyTheme(newTheme);
+          
+          // Sauvegarder le thème dans les paramètres utilisateur
+          const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+          if (!userData.settings) userData.settings = {};
+          userData.settings.theme = newTheme;
+          localStorage.setItem('userData', JSON.stringify(userData));
+        }
       }}>
         <TooltipProvider>
           <Toaster />

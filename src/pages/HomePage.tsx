@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SearchBar from '@/components/SearchBar';
@@ -303,7 +302,7 @@ const HomePage: React.FC = () => {
       <div className="py-10 px-4">
         <div className="max-w-screen-md mx-auto">
           <h1 className="font-audiowide text-4xl mb-8 glow text-primary-foreground text-center">
-            NeonWave
+            ServePics Music Player
           </h1>
           <AuthForm onAuthComplete={handleAuthComplete} />
         </div>
@@ -316,7 +315,7 @@ const HomePage: React.FC = () => {
       <div className="max-w-screen-xl mx-auto">
         <div className="mb-6">
           <h1 className="font-audiowide text-4xl mb-2 glow text-primary-foreground">
-            NeonWave
+            ServePics Music Player
           </h1>
           <p className="text-muted-foreground text-sm">
             Streaming musical sans tracking, sans pub

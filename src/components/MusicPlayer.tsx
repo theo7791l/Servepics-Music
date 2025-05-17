@@ -51,6 +51,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         title: track.title,
         artist: track.artist
       });
+      logAudio(`Updating Discord presence for: ${track.title} - ${track.artist}`);
     }
   };
   
@@ -88,67 +89,46 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     if (currentTrack && currentTrack.audioUrl) {
       logAudio(`Setting new track: ${currentTrack.title} - URL: ${currentTrack.audioUrl}`);
       
-      // Tester si l'URL est accessible
-      fetch(currentTrack.audioUrl, { method: 'HEAD' })
-        .then(response => {
-          if (response.ok) {
-            logAudio(`Audio URL is accessible: ${response.status}`);
-            audioRef.current!.src = currentTrack.audioUrl;
-            audioRef.current!.volume = volume / 100;
-            setAudioError(null);
-            
-            // Mettre à jour la présence Discord
-            updateDiscordPresence(currentTrack);
-            
-            // Auto-play new track
-            const playPromise = audioRef.current!.play();
-            if (playPromise !== undefined) {
-              playPromise
-                .then(() => {
-                  logAudio('Playback started successfully');
-                  setIsPlaying(true);
-                  setAudioError(null);
-                })
-                .catch(error => {
-                  logAudio(`Playback failed: ${error.message}`);
-                  // Réessayer après un court délai
-                  setTimeout(() => {
-                    audioRef.current!.play()
-                      .then(() => {
-                        setIsPlaying(true);
-                        setAudioError(null);
-                      })
-                      .catch(secondError => {
-                        logAudio(`Second playback attempt failed: ${secondError.message}`);
-                        setIsPlaying(false);
-                        setAudioError("Impossible de lire ce titre automatiquement. Cliquez sur Play.");
-                      });
-                  }, 1000);
-                });
-            }
-          } else {
-            logAudio(`Audio URL is not accessible: ${response.status}`);
-            setAudioError(`URL audio inaccessible (${response.status}). Essayez un autre titre.`);
-          }
-        })
-        .catch(error => {
-          logAudio(`Error testing audio URL: ${error.message}`);
-          // Essayer quand même de jouer l'audio, au cas où la requête HEAD ne serait pas supportée
-          audioRef.current!.src = currentTrack.audioUrl;
-          audioRef.current!.volume = volume / 100;
-          
-          // Auto-play new track
-          audioRef.current!.play()
+      // Essayer d'accéder directement à l'URL audio
+      try {
+        audioRef.current!.src = currentTrack.audioUrl;
+        audioRef.current!.volume = volume / 100;
+        setAudioError(null);
+        
+        // Mettre à jour la présence Discord
+        updateDiscordPresence(currentTrack);
+        
+        // Auto-play new track
+        const playPromise = audioRef.current!.play();
+        if (playPromise !== undefined) {
+          playPromise
             .then(() => {
+              logAudio('Playback started successfully');
               setIsPlaying(true);
               setAudioError(null);
             })
-            .catch(playError => {
-              logAudio(`Playback failed after fetch error: ${playError.message}`);
-              setIsPlaying(false);
-              setAudioError("L'URL audio est inaccessible ou ne peut pas être lue.");
+            .catch(error => {
+              logAudio(`Playback failed: ${error.message}`);
+              // Réessayer après un court délai
+              setTimeout(() => {
+                audioRef.current!.play()
+                  .then(() => {
+                    setIsPlaying(true);
+                    setAudioError(null);
+                  })
+                  .catch(secondError => {
+                    logAudio(`Second playback attempt failed: ${secondError.message}`);
+                    setIsPlaying(false);
+                    setAudioError("Impossible de lire ce titre automatiquement. Cliquez sur Play.");
+                  });
+              }, 1000);
             });
-        });
+        }
+      } catch (error) {
+        logAudio(`Error setting track: ${error}`);
+        setAudioError("Erreur lors de la configuration de l'audio. Vérifiez l'URL audio.");
+        setIsPlaying(false);
+      }
     }
     
     // Clean up on unmount
@@ -221,6 +201,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setIsPlaying(false);
     } else {
       logAudio('Attempting to play');
+      // Vérifier si l'audio est déjà chargé
+      if (!audioRef.current?.src || audioRef.current.src !== currentTrack.audioUrl) {
+        logAudio('Setting new audio source before playing');
+        audioRef.current!.src = currentTrack.audioUrl;
+        audioRef.current!.volume = volume / 100;
+      }
+      
       const playPromise = audioRef.current?.play();
       
       if (playPromise !== undefined) {
@@ -232,13 +219,55 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           })
           .catch(error => {
             logAudio(`Playback failed: ${error.message}`);
-            toast({
-              title: "Erreur de lecture",
-              description: "Impossible de lire ce titre. Essayez un autre.",
-              variant: "destructive",
-              duration: 3000,
-            });
-            setAudioError("Erreur lors de la lecture. Essayez de recharger la page ou un autre titre.");
+            
+            // Si l'erreur est liée à l'autoplay, essayons une autre approche
+            if (error.name === 'NotAllowedError') {
+              logAudio('Autoplay not allowed, trying a different approach');
+              
+              // Créer un nouvel élément audio avec des attributs spécifiques
+              const newAudio = new Audio();
+              newAudio.src = currentTrack.audioUrl;
+              newAudio.volume = volume / 100;
+              newAudio.crossOrigin = "anonymous";
+              newAudio.preload = "auto";
+              
+              // Remplacer l'élément audio actuel
+              audioRef.current = newAudio;
+              
+              // Ajouter les mêmes écouteurs d'événements
+              newAudio.addEventListener('error', (e) => {
+                const err = (e.target as HTMLAudioElement).error;
+                logAudio(`Error event triggered on new audio: ${err?.code} - ${err?.message}`);
+                setAudioError(`Nouvelle erreur de lecture (${err?.code}). Essayez un autre titre.`);
+                setIsPlaying(false);
+                setAudioLoading(false);
+              });
+              
+              newAudio.addEventListener('canplay', () => {
+                logAudio('New audio can play');
+                setAudioLoading(false);
+                newAudio.play()
+                  .then(() => {
+                    setIsPlaying(true);
+                    setAudioError(null);
+                  })
+                  .catch(err => {
+                    logAudio(`Still failed to play: ${err.message}`);
+                    setAudioError("Impossible de lire l'audio après plusieurs tentatives. Vérifiez l'URL.");
+                  });
+              });
+              
+              // Essayer de charger l'audio
+              setAudioLoading(true);
+            } else {
+              toast({
+                title: "Erreur de lecture",
+                description: "Impossible de lire ce titre. Essayez un autre.",
+                variant: "destructive",
+                duration: 3000,
+              });
+              setAudioError("Erreur lors de la lecture. Essayez de recharger la page ou un autre titre.");
+            }
           });
       } else {
         logAudio('Play returned undefined promise');
