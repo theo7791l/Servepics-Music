@@ -4,6 +4,7 @@ import SearchBar from '@/components/SearchBar';
 import TrackList from '@/components/TrackList';
 import MusicPlayer from '@/components/MusicPlayer';
 import { toast } from "@/hooks/use-toast";
+import { useNavigate } from 'react-router-dom';
 
 // Types pour la réponse API Invidious
 interface InvidiousVideo {
@@ -58,8 +59,32 @@ const invidiousInstances = [
   'https://invidious.fdn.fr',
   'https://y.com.sb',
   'https://invidious.slipfox.xyz',
-  'https://invidious.privacydev.net'
+  'https://invidious.privacydev.net',
+  'https://invidious.garudalinux.org',
+  'https://invidious.flokinet.to',
+  'https://invidious.nerdvpn.de'
 ];
+
+// Filtre pour ne garder que les résultats musicaux
+const isMusicContent = (video: InvidiousVideo): boolean => {
+  const musicKeywords = [
+    'official music video', 'audio', 'lyric', 'music', 'song', 'track',
+    'album', 'single', 'remix', 'live', 'concert', 'officiel', 'clip',
+    'musique', 'chanson', 'titre'
+  ];
+  
+  // Convertir en minuscules pour une recherche insensible à la casse
+  const titleLower = video.title.toLowerCase();
+  const descriptionLower = video.description.toLowerCase();
+  
+  // Vérifier si le contenu semble musical
+  return musicKeywords.some(keyword => 
+    titleLower.includes(keyword.toLowerCase()) || 
+    descriptionLower.includes(keyword.toLowerCase())
+  ) || 
+  // Ou si la durée est typique d'une chanson (entre 1 et 8 minutes)
+  (video.lengthSeconds >= 60 && video.lengthSeconds <= 480);
+};
 
 const SearchPage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -67,6 +92,30 @@ const SearchPage: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigate = useNavigate();
+  
+  // Vérifier l'authentification au chargement
+  useEffect(() => {
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        if (parsed.username && parsed.pin) {
+          setIsAuthenticated(true);
+        } else {
+          // L'utilisateur a des données mais incomplètes
+          navigate('/');
+        }
+      } catch (e) {
+        console.error("Error parsing user data:", e);
+        navigate('/');
+      }
+    } else {
+      // Pas de données utilisateur, rediriger vers la page d'accueil
+      navigate('/');
+    }
+  }, [navigate]);
   
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
@@ -79,7 +128,7 @@ const SearchPage: React.FC = () => {
     for (const instance of invidiousInstances) {
       try {
         console.log(`Trying search with instance: ${instance}`);
-        const url = `${instance}/api/v1/search?q=${encodeURIComponent(query)}`;
+        const url = `${instance}/api/v1/search?q=${encodeURIComponent(query + " music")}`;
         const response = await fetch(url, { mode: 'cors' });
         
         if (!response.ok) {
@@ -89,12 +138,15 @@ const SearchPage: React.FC = () => {
         
         const data = await response.json();
         
-        // Filtrer uniquement les résultats vidéo (pas les playlists, chaînes, etc.)
-        const videoResults = data.filter((item: InvidiousVideo) => item.type === "video");
+        // Filtrer uniquement les résultats vidéo qui semblent être de la musique
+        const videoResults = data
+          .filter((item: InvidiousVideo) => item.type === "video")
+          .filter(isMusicContent);
         
         // Conversion en format track de notre app
         const tracks = videoResults.map(convertToTrack);
         
+        // Trier par pertinence (déjà fait par l'API)
         setSearchResults(tracks);
         setIsSearching(false);
         searchSuccess = true;
@@ -143,30 +195,61 @@ const SearchPage: React.FC = () => {
           
           const data = await response.json();
           
-          // Trouver le format audio uniquement avec la meilleure qualité
+          // Trouver tous les formats audio disponibles
           const audioFormats = data.adaptiveFormats
             .filter((format: any) => format.type.startsWith('audio/'))
             .sort((a: any, b: any) => b.bitrate - a.bitrate);
           
           if (audioFormats.length > 0) {
-            const audioTrack = {
-              ...track,
-              audioUrl: audioFormats[0].url,
-              title: data.title,
-              artist: data.author,
-              duration: data.lengthSeconds,
-              // Utiliser une miniature de meilleure qualité si disponible
-              coverUrl: data.videoThumbnails.find((t: any) => t.quality === 'maxres')?.url || 
-                      data.videoThumbnails.find((t: any) => t.quality === 'high')?.url || 
-                      track.coverUrl
-            };
+            // Essayer plusieurs formats audio si disponibles
+            let audioTrack = null;
+            let audioUrl = null;
             
-            // Stocker dans localStorage pour la persistance
-            localStorage.setItem('currentTrack', JSON.stringify(audioTrack));
+            // Tester chaque format jusqu'à trouver un qui fonctionne
+            for (const format of audioFormats) {
+              try {
+                // Vérifier si l'URL est accessible
+                const testResponse = await fetch(format.url, { method: 'HEAD' });
+                if (testResponse.ok) {
+                  audioUrl = format.url;
+                  break;
+                }
+              } catch (e) {
+                console.warn("Format audio inaccessible, essai suivant:", e);
+              }
+            }
             
-            setCurrentTrack(audioTrack);
-            setIsSearching(false);
-            return; // Succès!
+            // Si aucun format n'est accessible, utiliser le premier
+            if (!audioUrl && audioFormats.length > 0) {
+              audioUrl = audioFormats[0].url;
+            }
+            
+            if (audioUrl) {
+              audioTrack = {
+                ...track,
+                audioUrl: audioUrl,
+                title: data.title,
+                artist: data.author,
+                duration: data.lengthSeconds,
+                // Utiliser une miniature de meilleure qualité si disponible
+                coverUrl: data.videoThumbnails.find((t: any) => t.quality === 'maxres')?.url || 
+                        data.videoThumbnails.find((t: any) => t.quality === 'high')?.url || 
+                        track.coverUrl
+              };
+              
+              // Stocker dans localStorage pour la persistance
+              localStorage.setItem('currentTrack', JSON.stringify(audioTrack));
+              
+              // Ajouter à la queue globale (via le contexte)
+              // Mettre à jour le player global
+              window.dispatchEvent(new CustomEvent('trackSelected', { detail: audioTrack }));
+              
+              setCurrentTrack(audioTrack);
+              setIsSearching(false);
+              return; // Succès!
+            } else {
+              throw new Error("No accessible audio formats");
+            }
           } else {
             throw new Error("No audio formats found");
           }
@@ -260,6 +343,11 @@ const SearchPage: React.FC = () => {
       });
     }
   };
+  
+  // Si l'utilisateur n'est pas authentifié, ne rien afficher
+  if (!isAuthenticated) {
+    return null;
+  }
   
   return (
     <div className="py-4 px-4">
