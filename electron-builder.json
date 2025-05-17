@@ -1,0 +1,35 @@
+
+{
+  "appId": "com.neonwave.musicplayer",
+  "productName": "NeonWave Music Player",
+  "copyright": "Copyright © 2024",
+  "directories": {
+    "output": "release/"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "package.json"
+  ],
+  "mac": {
+    "category": "public.app-category.music",
+    "icon": "public/icon.icns"
+  },
+  "win": {
+    "target": [
+      "nsis"
+    ],
+    "icon": "public/favicon.ico"
+  },
+  "linux": {
+    "target": [
+      "deb",
+      "AppImage"
+    ],
+    "category": "Audio"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}
