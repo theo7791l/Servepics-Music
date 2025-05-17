@@ -1,3 +1,4 @@
+
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const url = require('url');
@@ -70,6 +71,11 @@ app.on('activate', function () {
 // Dans ce fichier, vous pouvez inclure le reste du code spécifique au processus principal de
 // votre application. Vous pouvez également le mettre dans des fichiers séparés et les inclure ici.
 
+// Amélioration du système de logs pour déboguer les problèmes audio
+ipcMain.on('log-audio', (event, message) => {
+  console.log(`[AUDIO LOG] ${message}`);
+});
+
 // Gérer l'intégration Discord Rich Presence
 let discordRPC;
 try {
@@ -89,10 +95,10 @@ if (discordRPC) {
     
     // Mettre à jour la présence
     rpc.setActivity({
-      details: 'NeonWave Music Player',
+      details: 'ServePics Music Player',
       state: 'En écoute',
       largeImageKey: 'app_logo',
-      largeImageText: 'NeonWave Music',
+      largeImageText: 'ServePics Music',
       smallImageKey: 'playing_icon',
       smallImageText: 'Écoute de la musique',
       instance: false,
@@ -106,10 +112,10 @@ if (discordRPC) {
   ipcMain.on('update-presence', (event, trackInfo) => {
     if (rpc) {
       rpc.setActivity({
-        details: trackInfo.title || 'NeonWave Music Player',
+        details: trackInfo.title || 'ServePics Music Player',
         state: `Par ${trackInfo.artist || 'Artiste inconnu'}`,
         largeImageKey: 'app_logo',
-        largeImageText: 'NeonWave Music',
+        largeImageText: 'ServePics Music',
         smallImageKey: 'playing_icon',
         smallImageText: 'En écoute',
         instance: false,

@@ -7,7 +7,9 @@ contextBridge.exposeInMainWorld('electron', {
   minimize: () => ipcRenderer.send('app-minimize'),
   maximize: () => ipcRenderer.send('app-maximize'),
   close: () => ipcRenderer.send('app-close'),
-  updateDiscordPresence: (trackInfo) => ipcRenderer.send('update-presence', trackInfo)
+  updateDiscordPresence: (trackInfo) => ipcRenderer.send('update-presence', trackInfo),
+  // Ajout de méthodes pour déboguer l'audio
+  logAudio: (message) => ipcRenderer.send('log-audio', message)
 });
 
 // All of the Node.js APIs are available in the preload process.

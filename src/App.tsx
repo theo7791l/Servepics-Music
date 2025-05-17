@@ -28,11 +28,15 @@ export const PlayerContext = React.createContext<{
   setCurrentTrack: (track: any) => void;
   handleNextTrack: () => void;
   handlePreviousTrack: () => void;
+  theme: string;
+  setTheme: (theme: string) => void;
 }>({
   currentTrack: null,
   setCurrentTrack: () => {},
   handleNextTrack: () => {},
   handlePreviousTrack: () => {},
+  theme: 'violet',
+  setTheme: () => {},
 });
 
 // Global player component that persists across routes
@@ -63,10 +67,11 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [queue, setQueue] = useState<any[]>([]);
+  const [theme, setTheme] = useState('violet');
 
   useEffect(() => {
     // Clean up console
-    console.log("%cNeonWave Music Player", "color: #8A2BE2; font-size: 24px; font-weight: bold;");
+    console.log("%cServePics Music Player", "color: #8A2BE2; font-size: 24px; font-weight: bold;");
     console.log("%cPrivacy First | No Tracking | Open Source", "color: #00FFFF; font-size: 14px;");
     
     // Load current track and queue from localStorage
@@ -94,6 +99,7 @@ const App = () => {
       try {
         const parsed = JSON.parse(userData);
         if (parsed.settings?.theme) {
+          setTheme(parsed.settings.theme);
           document.documentElement.classList.remove('theme-violet', 'theme-blue', 'theme-green');
           document.documentElement.classList.add(`theme-${parsed.settings.theme}`);
         }
@@ -101,6 +107,20 @@ const App = () => {
         console.error("Error loading theme:", e);
       }
     }
+    
+    // Ajouter un listener pour les changements de thème
+    window.addEventListener('themeChanged', ((event: CustomEvent) => {
+      const newTheme = event.detail;
+      if (newTheme) {
+        setTheme(newTheme);
+        document.documentElement.classList.remove('theme-violet', 'theme-blue', 'theme-green');
+        document.documentElement.classList.add(`theme-${newTheme}`);
+      }
+    }) as EventListener);
+    
+    return () => {
+      window.removeEventListener('themeChanged', (() => {}) as EventListener);
+    };
   }, []);
   
   // Handle next track
@@ -146,7 +166,9 @@ const App = () => {
         currentTrack,
         setCurrentTrack: updateCurrentTrack,
         handleNextTrack,
-        handlePreviousTrack
+        handlePreviousTrack,
+        theme,
+        setTheme
       }}>
         <TooltipProvider>
           <Toaster />
@@ -161,7 +183,7 @@ const App = () => {
           <TitleBar />
           
           {/* Main App */}
-          <div className="min-h-screen flex flex-col md:flex-row overflow-hidden pt-8">
+          <div className={`min-h-screen flex flex-col md:flex-row overflow-hidden pt-8 theme-${theme}`}>
             <BackgroundParticles />
             
             <BrowserRouter>

@@ -8,6 +8,7 @@ declare global {
       minimize: () => void;
       maximize: () => void;
       close: () => void;
+      logAudio?: (message: string) => void;
     };
   }
 }
@@ -33,7 +34,7 @@ const TitleBar: React.FC = () => {
 
   return (
     <div className="fixed top-0 left-0 right-0 h-8 bg-background/50 backdrop-blur-md flex items-center justify-between px-2 z-50 app-drag">
-      <div className="text-xs font-audiowide text-primary-foreground">NeonWave Music Player</div>
+      <div className="text-xs font-audiowide text-primary-foreground">ServePics Music Player</div>
       <div className="flex items-center space-x-1 app-no-drag">
         <button 
           onClick={handleMinimize} 

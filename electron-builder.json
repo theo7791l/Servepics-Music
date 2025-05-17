@@ -1,7 +1,7 @@
 
 {
-  "appId": "com.neonwave.musicplayer",
-  "productName": "NeonWave Music Player",
+  "appId": "com.servepics.musicplayer",
+  "productName": "ServePics Music Player",
   "copyright": "Copyright © 2024",
   "directories": {
     "output": "release/"

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Check, Cloud, Download, Info, HardDrive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -8,11 +8,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from '@/components/ui/separator';
 import { toast } from "@/hooks/use-toast";
 import AuthForm from '@/components/AuthForm';
+import { PlayerContext } from '@/App';
 
 const SettingsPage: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   // Theme settings
-  const [currentTheme, setCurrentTheme] = useState<string>('violet');
+  const { theme, setTheme } = useContext(PlayerContext);
   const [offlineMode, setOfflineMode] = useState<boolean>(false);
   const [downloadEnabled, setDownloadEnabled] = useState<boolean>(true);
   const [currentInstance, setCurrentInstance] = useState<string>('auto');
@@ -43,7 +44,6 @@ const SettingsPage: React.FC = () => {
         
         // Charger les paramètres utilisateur
         if (parsed.settings) {
-          setCurrentTheme(parsed.settings.theme || 'violet');
           setOfflineMode(parsed.settings.offlineMode || false);
           setDownloadEnabled(parsed.settings.downloadEnabled || true);
           setCurrentInstance(parsed.settings.instance || 'auto');
@@ -62,7 +62,6 @@ const SettingsPage: React.FC = () => {
       try {
         const parsed = JSON.parse(userData);
         if (parsed.settings) {
-          setCurrentTheme(parsed.settings.theme || 'violet');
           setOfflineMode(parsed.settings.offlineMode || false);
           setDownloadEnabled(parsed.settings.downloadEnabled || true);
           setCurrentInstance(parsed.settings.instance || 'auto');
@@ -75,7 +74,10 @@ const SettingsPage: React.FC = () => {
   
   // Handle theme change
   const handleThemeChange = (themeId: string) => {
-    setCurrentTheme(themeId);
+    setTheme(themeId);
+    
+    // Déclencher un événement personnalisé pour informer l'application du changement de thème
+    window.dispatchEvent(new CustomEvent('themeChanged', { detail: themeId }));
     
     // Apply theme immediately
     document.documentElement.classList.remove('theme-violet', 'theme-blue', 'theme-green');
@@ -146,7 +148,7 @@ const SettingsPage: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'neonwave-settings.json';
+    a.download = 'servepics-settings.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -154,7 +156,7 @@ const SettingsPage: React.FC = () => {
     
     toast({
       title: "Paramètres exportés",
-      description: "Fichier neonwave-settings.json téléchargé",
+      description: "Fichier servepics-settings.json téléchargé",
       duration: 3000,
     });
   };
@@ -164,7 +166,7 @@ const SettingsPage: React.FC = () => {
       <div className="py-10 px-4">
         <div className="max-w-screen-md mx-auto">
           <h1 className="font-audiowide text-3xl mb-8 glow text-primary-foreground text-center">
-            Paramètres - NeonWave
+            Paramètres - ServePics
           </h1>
           <AuthForm onAuthComplete={handleAuthComplete} />
         </div>
@@ -192,7 +194,7 @@ const SettingsPage: React.FC = () => {
             </h2>
             
             <RadioGroup 
-              value={currentTheme}
+              value={theme}
               onValueChange={handleThemeChange}
               className="grid gap-4 grid-cols-1 md:grid-cols-3"
             >
@@ -331,10 +333,14 @@ const SettingsPage: React.FC = () => {
                               localStorage.setItem('userData', JSON.stringify(importedData));
                               
                               // Appliquer les paramètres importés
-                              setCurrentTheme(importedData.settings.theme || 'violet');
+                              setTheme(importedData.settings.theme || 'violet');
                               setOfflineMode(importedData.settings.offlineMode || false);
                               setDownloadEnabled(importedData.settings.downloadEnabled || true);
                               setCurrentInstance(importedData.settings.instance || 'auto');
+                              
+                              // Apply theme immediately
+                              document.documentElement.classList.remove('theme-violet', 'theme-blue', 'theme-green');
+                              document.documentElement.classList.add(`theme-${importedData.settings.theme || 'violet'}`);
                               
                               toast({
                                 title: "Paramètres importés",
