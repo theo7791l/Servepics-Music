@@ -47,3 +47,24 @@ body, html {
     margin: 0.5em;
   }
 }
+
+/* Fix cursor in hacker theme */
+body.theme-hacker * {
+  cursor: default !important;
+}
+
+/* Fix specific theme issues */
+.navbar-container {
+  color: var(--foreground);
+}
+
+.search-container {
+  color: var(--foreground);
+}
+
+@media screen and (max-width: 768px) {
+  .navbar-container {
+    background-color: rgba(var(--muted), 0.9);
+    backdrop-filter: blur(10px);
+  }
+}

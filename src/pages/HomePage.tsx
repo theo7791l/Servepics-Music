@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SearchBar from '@/components/SearchBar';
@@ -29,7 +30,10 @@ const invidiousInstances = [
   'https://invidious.fdn.fr',
   'https://y.com.sb',
   'https://invidious.slipfox.xyz',
-  'https://invidious.privacydev.net'
+  'https://invidious.privacydev.net',
+  'https://vid.puffyan.us',
+  'https://invidious.namazso.eu',
+  'https://inv.riverside.rocks'
 ];
 
 const HomePage: React.FC = () => {
@@ -89,7 +93,7 @@ const HomePage: React.FC = () => {
         try {
           // Recherche pour "music" pour obtenir des morceaux populaires
           const url = `${instance}/api/v1/search?q=music`;
-          const response = await fetch(url, { mode: 'cors' });
+          const response = await fetch(url);
           
           if (!response.ok) {
             throw new Error(`API returned status ${response.status}`);
@@ -117,15 +121,18 @@ const HomePage: React.FC = () => {
           });
           
           setRandomTracks(tracks);
-          break; // Sortir de la boucle si succès
+          setIsLoading(false);
+          return; // Sortir de la boucle si succès
         } catch (err) {
           console.error(`Failed to fetch popular tracks from ${instance}:`, err);
           // Continuer avec l'instance suivante
         }
       }
+      
+      // Si toutes les instances ont échoué
+      throw new Error("All instances failed");
     } catch (e) {
       console.error("Error fetching popular tracks:", e);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -164,7 +171,7 @@ const HomePage: React.FC = () => {
         for (const instance of invidiousInstances) {
           try {
             const url = `${instance}/api/v1/videos/${track.videoId}`;
-            const response = await fetch(url, { mode: 'cors' });
+            const response = await fetch(url);
             
             if (!response.ok) {
               throw new Error(`API returned status ${response.status}`);
@@ -189,6 +196,19 @@ const HomePage: React.FC = () => {
                         data.videoThumbnails?.find((t: any) => t.quality === 'high')?.url || 
                         track.coverUrl
               };
+              
+              // Mettre à jour Discord Rich Presence si disponible
+              if (window.electron?.updateDiscordPresence) {
+                window.electron.updateDiscordPresence({
+                  title: audioTrack.title,
+                  artist: audioTrack.artist
+                });
+              }
+              
+              // Journal audio si disponible
+              if (window.electron?.logAudio) {
+                window.electron.logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
+              }
               
               // Stocker dans localStorage pour la persistance
               setCurrentTrack(audioTrack);

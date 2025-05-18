@@ -82,11 +82,11 @@ function App() {
               
               <div className="p-4 md:p-6 relative z-10">
                 <Routes>
-                  <Route path="/" element={<Index />} />
+                  <Route path="/" element={<HomePage />} />
                   <Route path="/home" element={<HomePage />} />
                   <Route path="/search" element={<SearchPage />} />
                   <Route path="/playlists" element={
-                    <PlaylistsPage isAuthRequired={!isAuthenticated} />
+                    <PlaylistsPage />
                   } />
                   <Route path="/settings" element={<SettingsPage onThemeChange={applyTheme} currentTheme={theme} />} />
                   <Route path="/about" element={<AboutPage />} />

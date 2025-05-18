@@ -19,7 +19,7 @@ const Navbar: React.FC = () => {
   ];
   
   return (
-    <div className="fixed bottom-0 left-0 w-full bg-muted/30 backdrop-blur-xl border-t border-primary/20 py-1 md:relative md:w-16 md:h-screen md:border-t-0 md:border-r md:border-primary/20 z-10 navbar-container">
+    <div className="fixed bottom-0 left-0 w-full bg-muted/90 backdrop-blur-xl border-t border-primary/20 py-1 md:relative md:w-16 md:h-screen md:border-t-0 md:border-r md:border-primary/20 z-10 navbar-container">
       <div className="flex justify-around md:flex-col md:justify-start md:items-center md:pt-6 md:space-y-8">
         {navItems.map((item) => (
           <Link

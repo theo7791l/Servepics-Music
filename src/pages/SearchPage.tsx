@@ -92,23 +92,7 @@ const SearchPage: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
-  
-  // Vérifier l'authentification au chargement
-  useEffect(() => {
-    const userData = localStorage.getItem('userData');
-    if (userData) {
-      try {
-        const parsed = JSON.parse(userData);
-        if (parsed.username && parsed.pin) {
-          setIsAuthenticated(true);
-        }
-      } catch (e) {
-        console.error("Error parsing user data:", e);
-      }
-    }
-  }, []);
   
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
@@ -195,7 +179,6 @@ const SearchPage: React.FC = () => {
           
           if (audioFormats.length > 0) {
             // Essayer plusieurs formats audio si disponibles
-            let audioTrack = null;
             let audioUrl = null;
             
             // Tester chaque format jusqu'à trouver un qui fonctionne
@@ -218,7 +201,7 @@ const SearchPage: React.FC = () => {
             }
             
             if (audioUrl) {
-              audioTrack = {
+              const audioTrack = {
                 ...track,
                 audioUrl: audioUrl,
                 title: data.title,
@@ -230,7 +213,7 @@ const SearchPage: React.FC = () => {
                         track.coverUrl
               };
               
-              // Mettre à jour Discord
+              // Mettre à jour Discord Rich Presence si disponible
               if (window.electron?.updateDiscordPresence) {
                 window.electron.updateDiscordPresence({
                   title: audioTrack.title,
@@ -238,7 +221,7 @@ const SearchPage: React.FC = () => {
                 });
               }
               
-              // Journal audio
+              // Journal audio si disponible
               if (window.electron?.logAudio) {
                 window.electron.logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
               }
