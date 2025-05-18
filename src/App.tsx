@@ -10,9 +10,10 @@ import Navbar from './components/Navbar';
 import BackgroundParticles from './components/BackgroundParticles';
 import { Toaster } from './components/ui/toaster';
 import UpdateChecker from './components/UpdateChecker';
+import AuthForm from './components/AuthForm';
+import UserProfile from './components/UserProfile';
 
 // Pages
-import Index from './pages/Index';
 import HomePage from './pages/HomePage';
 import SearchPage from './pages/SearchPage';
 import PlaylistsPage from './pages/PlaylistsPage';
@@ -44,7 +45,23 @@ function App() {
     setTheme(selectedTheme);
   };
 
-  // Initialize theme from localStorage on mount
+  // Vérifier l'état de l'authentification
+  const checkAuthentication = () => {
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        setIsAuthenticated(!!parsed.pin);
+      } catch (e) {
+        console.error("Error parsing user data:", e);
+        setIsAuthenticated(false);
+      }
+    } else {
+      setIsAuthenticated(false);
+    }
+  };
+
+  // Initialize theme from localStorage on mount and check auth
   useEffect(() => {
     const savedTheme = localStorage.getItem('app-theme') || 'violet';
     applyTheme(savedTheme);
@@ -55,43 +72,55 @@ function App() {
     }, 100);
 
     // Check authentication status
-    const userData = localStorage.getItem('userData');
-    if (userData) {
-      try {
-        const parsed = JSON.parse(userData);
-        setIsAuthenticated(!!parsed.pin);
-      } catch (e) {
-        console.error("Error parsing user data:", e);
-      }
-    }
+    checkAuthentication();
   }, []);
+
+  // Gestionnaire de déconnexion
+  const handleLogout = () => {
+    localStorage.removeItem('userData');
+    setIsAuthenticated(false);
+  };
+
+  // Gestionnaire d'authentification complète
+  const handleAuthComplete = () => {
+    setIsAuthenticated(true);
+  };
+
+  if (loading) {
+    return <GlitchLoader onComplete={() => setLoading(false)} />;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
-      {loading && <GlitchLoader onComplete={() => setLoading(false)} />}
-      
       <Router>
         <div className="flex flex-col h-screen w-screen overflow-hidden">
-          <TitleBar />
+          <div className="flex items-center">
+            <TitleBar />
+            {isAuthenticated && <UserProfile onLogout={handleLogout} />}
+          </div>
           
           <div className="flex flex-1 overflow-hidden">
-            <Navbar />
+            {isAuthenticated && <Navbar />}
             
             <main className="flex-1 overflow-auto relative">
               <BackgroundParticles />
               
               <div className="p-4 md:p-6 relative z-10">
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/home" element={<HomePage />} />
-                  <Route path="/search" element={<SearchPage />} />
-                  <Route path="/playlists" element={
-                    <PlaylistsPage />
-                  } />
-                  <Route path="/settings" element={<SettingsPage onThemeChange={applyTheme} currentTheme={theme} />} />
-                  <Route path="/about" element={<AboutPage />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
+                {isAuthenticated ? (
+                  <Routes>
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/home" element={<HomePage />} />
+                    <Route path="/search" element={<SearchPage />} />
+                    <Route path="/playlists" element={<PlaylistsPage />} />
+                    <Route path="/settings" element={<SettingsPage onThemeChange={applyTheme} currentTheme={theme} />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <AuthForm onAuthComplete={handleAuthComplete} />
+                  </div>
+                )}
               </div>
             </main>
           </div>

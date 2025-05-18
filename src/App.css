@@ -50,7 +50,13 @@ body, html {
 
 /* Fix cursor in hacker theme */
 body.theme-hacker * {
-  cursor: default !important;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2300ff00' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='15 10 20 15 15 20'%3E%3C/polyline%3E%3Cpath d='M4 4v7a4 4 0 0 0 4 4h12'%3E%3C/path%3E%3C/svg%3E"), auto !important;
+}
+
+/* Fix hover issues in hacker theme */
+body.theme-hacker *:hover {
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 /* Fix specific theme issues */
@@ -60,6 +66,12 @@ body.theme-hacker * {
 
 .search-container {
   color: var(--foreground);
+}
+
+.glass-morphism {
+  backdrop-filter: blur(12px);
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 @media screen and (max-width: 768px) {

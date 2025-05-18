@@ -37,6 +37,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const [isRepeat, setIsRepeat] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -119,6 +120,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     setAudioError(null);
     setAudioLoading(true);
     setProgress(0);
+    setRetryCount(0);
     
     try {
       // Set audio source and options
@@ -157,14 +159,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                     logAudio(`All playback attempts failed: ${err.message}`);
                     setIsPlaying(false);
                     
-                    // Create a new audio element as a last resort
-                    const newAudio = createAudioElement();
-                    newAudio.src = currentTrack.audioUrl;
-                    newAudio.volume = volume / 100;
-                    
-                    audioRef.current = newAudio;
-                    
-                    setAudioError("Cliquez sur Play pour lancer la lecture manuellement");
+                    // Essayer avec une URL alternative
+                    tryAlternativeUrl(currentTrack);
                   });
               }
             }, 1000);
@@ -175,8 +171,73 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setAudioError("Erreur lors de la configuration de l'audio. Vérifiez l'URL audio.");
       setIsPlaying(false);
       setAudioLoading(false);
+      
+      // Essayer avec une URL alternative
+      tryAlternativeUrl(currentTrack);
     }
   }, [currentTrack, volume]);
+  
+  // Fonction pour essayer des URL alternatives
+  const tryAlternativeUrl = (track: Track) => {
+    if (retryCount >= 3 || !track.videoId) return; // Limite de 3 tentatives
+    
+    setRetryCount(prev => prev + 1);
+    logAudio(`Trying alternative URL attempt ${retryCount + 1} for ${track.videoId}`);
+    
+    // Liste d'instances Invidious alternatives
+    const instances = [
+      'https://invidious.fdn.fr',
+      'https://y.com.sb',
+      'https://invidious.slipfox.xyz',
+      'https://invidious.privacydev.net',
+      'https://vid.puffyan.us'
+    ];
+    
+    // Essayer une instance alternative
+    const instance = instances[retryCount % instances.length];
+    const audioApiUrl = `${instance}/api/v1/videos/${track.videoId}`;
+    
+    fetch(audioApiUrl)
+      .then(response => {
+        if (!response.ok) throw new Error('API response not OK');
+        return response.json();
+      })
+      .then(data => {
+        const audioFormats = data.adaptiveFormats
+          .filter((format: any) => format.type.startsWith('audio/'))
+          .sort((a: any, b: any) => b.bitrate - a.bitrate);
+        
+        if (audioFormats.length > 0) {
+          const newUrl = audioFormats[0].url;
+          logAudio(`Found alternative audio URL: ${newUrl}`);
+          
+          if (audioRef.current) {
+            audioRef.current.src = newUrl;
+            audioRef.current.load();
+            audioRef.current.play()
+              .then(() => {
+                logAudio('Alternative URL playback successful');
+                setIsPlaying(true);
+                setAudioError(null);
+                
+                // Mettre à jour l'URL du morceau
+                const updatedTrack = { ...track, audioUrl: newUrl };
+                localStorage.setItem('currentTrack', JSON.stringify(updatedTrack));
+              })
+              .catch(err => {
+                logAudio(`Alternative URL playback failed: ${err.message}`);
+                setAudioError("Erreur lors de la lecture. Essayez un autre titre.");
+              });
+          }
+        } else {
+          throw new Error('No audio formats found');
+        }
+      })
+      .catch(error => {
+        logAudio(`Failed to get alternative URL: ${error.message}`);
+        setAudioError("Impossible de lire ce titre. Essayez-en un autre.");
+      });
+  };
   
   // Start/stop progress tracking based on play state
   useEffect(() => {
@@ -282,13 +343,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               
               setAudioError("Cliquez n'importe où sur la page pour autoriser la lecture audio");
             } else {
+              // Essayer une URL alternative si le lecteur n'arrive pas à jouer le fichier
+              tryAlternativeUrl(currentTrack);
+              
               toast({
-                title: "Erreur de lecture",
-                description: "Impossible de lire ce titre. Essayez un autre.",
-                variant: "destructive",
+                title: "Tentative de lecture alternative",
+                description: "Recherche d'une source audio alternative...",
                 duration: 3000,
               });
-              setAudioError("Erreur lors de la lecture. Essayez un autre titre ou rechargez la page.");
             }
           });
       } else {
@@ -359,6 +421,13 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       {audioError && (
         <div className="absolute top-0 left-0 right-0 bg-destructive/80 text-white text-center py-1 text-xs rounded-t-xl">
           {audioError}
+          <button 
+            onClick={() => tryAlternativeUrl(currentTrack)} 
+            className="ml-2 underline"
+            disabled={retryCount >= 3}
+          >
+            Réessayer
+          </button>
         </div>
       )}
       
