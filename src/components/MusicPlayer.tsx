@@ -20,6 +20,11 @@ interface MusicPlayerProps {
   onPrevious?: () => void;
 }
 
+// Define a typeguard function to check if electron features exist
+const hasElectronFeatures = (obj: any): boolean => {
+  return obj && typeof obj === 'object';
+};
+
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
   currentTrack, 
   onNext = () => {}, 
@@ -36,17 +41,17 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Envoyer les logs audio à Electron si disponible
+  // Envoyer les logs audio
   const logAudio = (message: string) => {
     console.log(`[AUDIO] ${message}`);
-    if (window.electron?.logAudio) {
+    if (window.electron && hasElectronFeatures(window.electron) && window.electron.logAudio) {
       window.electron.logAudio(message);
     }
   };
   
   // Mettre à jour la présence Discord si disponible
   const updateDiscordPresence = (track: Track) => {
-    if (window.electron?.updateDiscordPresence) {
+    if (window.electron && hasElectronFeatures(window.electron) && window.electron.updateDiscordPresence) {
       window.electron.updateDiscordPresence({
         title: track.title,
         artist: track.artist
@@ -55,95 +60,126 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }
   };
   
+  const createAudioElement = (): HTMLAudioElement => {
+    const audio = new Audio();
+    
+    audio.addEventListener('error', (e) => {
+      const error = (e.target as HTMLAudioElement).error;
+      logAudio(`Error event triggered: ${error?.code} - ${error?.message}`);
+      setAudioError(`Erreur de lecture audio (${error?.code}). Essayez un autre titre.`);
+      setIsPlaying(false);
+      setAudioLoading(false);
+    });
+    
+    audio.addEventListener('loadstart', () => {
+      logAudio('Audio loading started');
+      setAudioLoading(true);
+    });
+    
+    audio.addEventListener('loadeddata', () => {
+      logAudio('Audio data loaded');
+      setAudioLoading(false);
+    });
+    
+    audio.addEventListener('canplay', () => {
+      logAudio('Audio can play');
+      setAudioLoading(false);
+    });
+    
+    audio.crossOrigin = "anonymous";
+    audio.preload = "auto";
+    return audio;
+  };
+  
+  // Setup audio element when component mounts
   useEffect(() => {
-    // Setup audio element if it doesn't exist
     if (!audioRef.current) {
-      audioRef.current = new Audio();
-      
-      // Add event listeners
-      audioRef.current.addEventListener('error', (e) => {
-        const error = (e.target as HTMLAudioElement).error;
-        logAudio(`Error event triggered: ${error?.code} - ${error?.message}`);
-        setAudioError(`Erreur de lecture audio (${error?.code}). Essayez un autre titre.`);
-        setIsPlaying(false);
-        setAudioLoading(false);
-      });
-      
-      audioRef.current.addEventListener('loadstart', () => {
-        logAudio('Audio loading started');
-        setAudioLoading(true);
-      });
-      
-      audioRef.current.addEventListener('loadeddata', () => {
-        logAudio('Audio data loaded');
-        setAudioLoading(false);
-      });
-      
-      audioRef.current.addEventListener('canplay', () => {
-        logAudio('Audio can play');
-        setAudioLoading(false);
-      });
+      audioRef.current = createAudioElement();
     }
     
-    // Update audio source when track changes
-    if (currentTrack && currentTrack.audioUrl) {
-      logAudio(`Setting new track: ${currentTrack.title} - URL: ${currentTrack.audioUrl}`);
+    return () => {
+      // Clean up audio element when component unmounts
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
+      }
+    };
+  }, []);
+  
+  // Update audio source when track changes
+  useEffect(() => {
+    if (!currentTrack || !currentTrack.audioUrl || !audioRef.current) {
+      return;
+    }
+    
+    logAudio(`Setting new track: ${currentTrack.title} - URL: ${currentTrack.audioUrl}`);
+    
+    // Reset states
+    setAudioError(null);
+    setAudioLoading(true);
+    setProgress(0);
+    
+    try {
+      // Set audio source and options
+      audioRef.current.src = currentTrack.audioUrl;
+      audioRef.current.volume = volume / 100;
+      audioRef.current.crossOrigin = "anonymous";
       
-      // Essayer d'accéder directement à l'URL audio
-      try {
-        audioRef.current!.src = currentTrack.audioUrl;
-        audioRef.current!.volume = volume / 100;
-        setAudioError(null);
-        
-        // Mettre à jour la présence Discord
-        updateDiscordPresence(currentTrack);
-        
-        // Auto-play new track
-        const playPromise = audioRef.current!.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              logAudio('Playback started successfully');
-              setIsPlaying(true);
-              setAudioError(null);
-            })
-            .catch(error => {
-              logAudio(`Playback failed: ${error.message}`);
-              // Réessayer après un court délai
-              setTimeout(() => {
-                audioRef.current!.play()
+      // Update Discord presence
+      updateDiscordPresence(currentTrack);
+      
+      // Attempt to play
+      audioRef.current.load();
+      
+      const playPromise = audioRef.current.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            logAudio('Playback started successfully');
+            setIsPlaying(true);
+            setAudioError(null);
+          })
+          .catch(error => {
+            logAudio(`Initial playback failed: ${error.message}`);
+            
+            // Try alternative approach with timeout
+            setTimeout(() => {
+              if (audioRef.current) {
+                audioRef.current.play()
                   .then(() => {
+                    logAudio('Delayed play successful');
                     setIsPlaying(true);
                     setAudioError(null);
                   })
-                  .catch(secondError => {
-                    logAudio(`Second playback attempt failed: ${secondError.message}`);
+                  .catch(err => {
+                    logAudio(`All playback attempts failed: ${err.message}`);
                     setIsPlaying(false);
-                    setAudioError("Impossible de lire ce titre automatiquement. Cliquez sur Play.");
+                    
+                    // Create a new audio element as a last resort
+                    const newAudio = createAudioElement();
+                    newAudio.src = currentTrack.audioUrl;
+                    newAudio.volume = volume / 100;
+                    
+                    audioRef.current = newAudio;
+                    
+                    setAudioError("Cliquez sur Play pour lancer la lecture manuellement");
                   });
-              }, 1000);
-            });
-        }
-      } catch (error) {
-        logAudio(`Error setting track: ${error}`);
-        setAudioError("Erreur lors de la configuration de l'audio. Vérifiez l'URL audio.");
-        setIsPlaying(false);
+              }
+            }, 1000);
+          });
       }
+    } catch (error) {
+      logAudio(`Error setting track: ${error}`);
+      setAudioError("Erreur lors de la configuration de l'audio. Vérifiez l'URL audio.");
+      setIsPlaying(false);
+      setAudioLoading(false);
     }
-    
-    // Clean up on unmount
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
   }, [currentTrack, volume]);
   
+  // Start/stop progress tracking based on play state
   useEffect(() => {
-    // Start/stop progress tracking based on play state
     if (isPlaying) {
       intervalRef.current = setInterval(() => {
         if (audioRef.current) {
@@ -201,64 +237,50 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setIsPlaying(false);
     } else {
       logAudio('Attempting to play');
-      // Vérifier si l'audio est déjà chargé
-      if (!audioRef.current?.src || audioRef.current.src !== currentTrack.audioUrl) {
-        logAudio('Setting new audio source before playing');
-        audioRef.current!.src = currentTrack.audioUrl;
-        audioRef.current!.volume = volume / 100;
+      
+      if (!audioRef.current) {
+        audioRef.current = createAudioElement();
       }
       
-      const playPromise = audioRef.current?.play();
+      // Vérifier si l'audio est déjà chargé
+      if (!audioRef.current.src || audioRef.current.src !== currentTrack.audioUrl) {
+        logAudio('Setting new audio source before playing');
+        audioRef.current.src = currentTrack.audioUrl;
+        audioRef.current.volume = volume / 100;
+        audioRef.current.load();
+      }
+      
+      const playPromise = audioRef.current.play();
       
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            logAudio('Playback started successfully');
+            logAudio('Manual play successful');
             setAudioError(null);
             setIsPlaying(true);
           })
           .catch(error => {
-            logAudio(`Playback failed: ${error.message}`);
+            logAudio(`Manual play failed: ${error.message}`);
             
-            // Si l'erreur est liée à l'autoplay, essayons une autre approche
+            // Attempt with a different approach for browser autoplay restrictions
             if (error.name === 'NotAllowedError') {
               logAudio('Autoplay not allowed, trying a different approach');
               
-              // Créer un nouvel élément audio avec des attributs spécifiques
-              const newAudio = new Audio();
-              newAudio.src = currentTrack.audioUrl;
-              newAudio.volume = volume / 100;
-              newAudio.crossOrigin = "anonymous";
-              newAudio.preload = "auto";
+              // Try with a user interaction context
+              document.addEventListener('click', function playOnClick() {
+                if (audioRef.current) {
+                  audioRef.current.play()
+                    .then(() => {
+                      setIsPlaying(true);
+                      setAudioError(null);
+                      document.removeEventListener('click', playOnClick);
+                    })
+                    .catch(e => logAudio(`Play on click failed: ${e.message}`));
+                }
+                document.removeEventListener('click', playOnClick);
+              }, { once: true });
               
-              // Remplacer l'élément audio actuel
-              audioRef.current = newAudio;
-              
-              // Ajouter les mêmes écouteurs d'événements
-              newAudio.addEventListener('error', (e) => {
-                const err = (e.target as HTMLAudioElement).error;
-                logAudio(`Error event triggered on new audio: ${err?.code} - ${err?.message}`);
-                setAudioError(`Nouvelle erreur de lecture (${err?.code}). Essayez un autre titre.`);
-                setIsPlaying(false);
-                setAudioLoading(false);
-              });
-              
-              newAudio.addEventListener('canplay', () => {
-                logAudio('New audio can play');
-                setAudioLoading(false);
-                newAudio.play()
-                  .then(() => {
-                    setIsPlaying(true);
-                    setAudioError(null);
-                  })
-                  .catch(err => {
-                    logAudio(`Still failed to play: ${err.message}`);
-                    setAudioError("Impossible de lire l'audio après plusieurs tentatives. Vérifiez l'URL.");
-                  });
-              });
-              
-              // Essayer de charger l'audio
-              setAudioLoading(true);
+              setAudioError("Cliquez n'importe où sur la page pour autoriser la lecture audio");
             } else {
               toast({
                 title: "Erreur de lecture",
@@ -266,7 +288,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 variant: "destructive",
                 duration: 3000,
               });
-              setAudioError("Erreur lors de la lecture. Essayez de recharger la page ou un autre titre.");
+              setAudioError("Erreur lors de la lecture. Essayez un autre titre ou rechargez la page.");
             }
           });
       } else {

@@ -71,7 +71,7 @@ const App = () => {
 
   useEffect(() => {
     // Clean up console
-    console.log("%cServePics Music Player", "color: #8A2BE2; font-size: 24px; font-weight: bold;");
+    console.log("%cServepics Music Player", "color: #8A2BE2; font-size: 24px; font-weight: bold;");
     console.log("%cPrivacy First | No Tracking | Open Source", "color: #00FFFF; font-size: 14px;");
     
     // Load current track and queue from localStorage
@@ -135,14 +135,20 @@ const App = () => {
       case 'violet':
         root.style.setProperty('--primary-color', '#9b87f5');
         root.style.setProperty('--secondary-color', '#7E69AB');
+        root.style.setProperty('--background-color', '#111');
+        root.style.setProperty('--text-color', '#fff');
         break;
       case 'blue':
         root.style.setProperty('--primary-color', '#0EA5E9');
         root.style.setProperty('--secondary-color', '#1EAEDB');
+        root.style.setProperty('--background-color', '#121218');
+        root.style.setProperty('--text-color', '#fff');
         break;
       case 'green':
         root.style.setProperty('--primary-color', '#10B981');
         root.style.setProperty('--secondary-color', '#059669');
+        root.style.setProperty('--background-color', '#121212');
+        root.style.setProperty('--text-color', '#fff');
         break;
       case 'hacker':
         root.style.setProperty('--primary-color', '#00FF41');
@@ -159,7 +165,15 @@ const App = () => {
       default:
         root.style.setProperty('--primary-color', '#9b87f5');
         root.style.setProperty('--secondary-color', '#7E69AB');
+        root.style.setProperty('--background-color', '#111');
+        root.style.setProperty('--text-color', '#fff');
     }
+    
+    // Force re-application of theme by toggling a class
+    document.body.classList.add('theme-transition');
+    setTimeout(() => {
+      document.body.classList.remove('theme-transition');
+    }, 100);
   }
   
   // Handle next track

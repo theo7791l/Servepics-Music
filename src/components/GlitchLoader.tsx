@@ -38,8 +38,8 @@ const GlitchLoader: React.FC<GlitchLoaderProps> = ({ onComplete }) => {
   return (
     <div className="fixed inset-0 bg-deepBlack flex flex-col items-center justify-center z-50">
       <div className="w-full max-w-md px-4">
-        <h1 className="font-audiowide text-4xl text-primary mb-6 glitch glow text-center">
-          NeonWave
+        <h1 className="font-audiowide text-4xl mb-6 glitch glow text-center">
+          Servepics music
         </h1>
         
         <div className="relative h-3 bg-muted/30 rounded-full overflow-hidden mb-3">
