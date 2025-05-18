@@ -1,10 +1,9 @@
-
 import React, { useState } from 'react';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
-import { Refresh, AlertCircle } from 'lucide-react';
+import { RefreshCw, AlertCircle } from 'lucide-react';
 
 interface SettingsPageProps {
   onThemeChange: (theme: string) => void;
@@ -159,7 +158,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onThemeChange, currentTheme
                 </>
               ) : (
                 <>
-                  <Refresh size={16} className="mr-2" />
+                  <RefreshCw size={16} className="mr-2" />
                   Vérifier maintenant
                 </>
               )}

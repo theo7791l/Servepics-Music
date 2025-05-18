@@ -1,3 +1,4 @@
+
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -92,4 +93,31 @@ ipcMain.on('open-external', (event, url) => {
   shell.openExternal(url).catch(err => {
     log(`Error opening URL: ${err}`);
   });
+});
+
+// Add window control handlers
+ipcMain.on('minimize-window', () => {
+  if (mainWindow) {
+    mainWindow.minimize();
+    log('[WINDOW] Minimized window');
+  }
+});
+
+ipcMain.on('maximize-window', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+      log('[WINDOW] Unmaximized window');
+    } else {
+      mainWindow.maximize();
+      log('[WINDOW] Maximized window');
+    }
+  }
+});
+
+ipcMain.on('close-window', () => {
+  if (mainWindow) {
+    mainWindow.close();
+    log('[WINDOW] Closed window');
+  }
 });
