@@ -132,6 +132,11 @@
     background-color: var(--background-color);
     color: var(--text-color);
     transition: background-color 0.3s ease, color 0.3s ease;
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
   }
   
   .theme-transition * {
@@ -213,9 +218,9 @@
   100% { box-shadow: 0 0 5px var(--primary-color), 0 0 10px var(--primary-color); }
 }
 
-/* Curseur personnalisé pour le mode hacker */
+/* Curseur personnalisé pour le mode hacker - correction du carré */
 .theme-hacker * {
-  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16' fill='%2300FF41' /></svg>"), auto;
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><path fill='%2300FF41' d='M1 1 L1 14 L14 14 L14 1 z M2 2 L13 2 L13 13 L2 13 z'/></svg>"), auto;
 }
 
 .theme-hacker .track-list-table tr.active,
@@ -319,4 +324,31 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--secondary-color);
+}
+
+/* Corrections des problèmes d'interface */
+.app-drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Correction du Navbar */
+.navbar-container {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  border-color: var(--primary-color);
+}
+
+/* Assurer que toute l'interface utilise les couleurs du thème */
+.search-container, 
+.playlist-container, 
+.about-container,
+.settings-container {
+  background-color: var(--background-color);
+  color: var(--text-color);
 }

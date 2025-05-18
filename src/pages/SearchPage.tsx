@@ -60,9 +60,9 @@ const invidiousInstances = [
   'https://y.com.sb',
   'https://invidious.slipfox.xyz',
   'https://invidious.privacydev.net',
-  'https://invidious.garudalinux.org',
-  'https://invidious.flokinet.to',
-  'https://invidious.nerdvpn.de'
+  'https://vid.puffyan.us',
+  'https://invidious.namazso.eu',
+  'https://inv.riverside.rocks'
 ];
 
 // Filtre pour ne garder que les résultats musicaux
@@ -103,19 +103,12 @@ const SearchPage: React.FC = () => {
         const parsed = JSON.parse(userData);
         if (parsed.username && parsed.pin) {
           setIsAuthenticated(true);
-        } else {
-          // L'utilisateur a des données mais incomplètes
-          navigate('/');
         }
       } catch (e) {
         console.error("Error parsing user data:", e);
-        navigate('/');
       }
-    } else {
-      // Pas de données utilisateur, rediriger vers la page d'accueil
-      navigate('/');
     }
-  }, [navigate]);
+  }, []);
   
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
@@ -129,7 +122,7 @@ const SearchPage: React.FC = () => {
       try {
         console.log(`Trying search with instance: ${instance}`);
         const url = `${instance}/api/v1/search?q=${encodeURIComponent(query + " music")}`;
-        const response = await fetch(url, { mode: 'cors' });
+        const response = await fetch(url);
         
         if (!response.ok) {
           console.error(`API returned status ${response.status}`);
@@ -187,7 +180,7 @@ const SearchPage: React.FC = () => {
         try {
           console.log(`Trying to get audio for video ${track.videoId} from instance: ${instance}`);
           const url = `${instance}/api/v1/videos/${track.videoId}`;
-          const response = await fetch(url, { mode: 'cors' });
+          const response = await fetch(url);
           
           if (!response.ok) {
             throw new Error(`API returned status ${response.status}`);
@@ -237,12 +230,21 @@ const SearchPage: React.FC = () => {
                         track.coverUrl
               };
               
+              // Mettre à jour Discord
+              if (window.electron?.updateDiscordPresence) {
+                window.electron.updateDiscordPresence({
+                  title: audioTrack.title,
+                  artist: audioTrack.artist
+                });
+              }
+              
+              // Journal audio
+              if (window.electron?.logAudio) {
+                window.electron.logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
+              }
+              
               // Stocker dans localStorage pour la persistance
               localStorage.setItem('currentTrack', JSON.stringify(audioTrack));
-              
-              // Ajouter à la queue globale (via le contexte)
-              // Mettre à jour le player global
-              window.dispatchEvent(new CustomEvent('trackSelected', { detail: audioTrack }));
               
               setCurrentTrack(audioTrack);
               setIsSearching(false);
@@ -344,13 +346,8 @@ const SearchPage: React.FC = () => {
     }
   };
   
-  // Si l'utilisateur n'est pas authentifié, ne rien afficher
-  if (!isAuthenticated) {
-    return null;
-  }
-  
   return (
-    <div className="py-4 px-4">
+    <div className="py-4 px-4 search-container">
       <div className="max-w-screen-xl mx-auto">
         <div className="mb-6">
           <h1 className="font-audiowide text-3xl mb-4 glow text-primary-foreground">

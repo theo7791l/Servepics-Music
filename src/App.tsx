@@ -1,5 +1,5 @@
 
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -29,6 +29,7 @@ const queryClient = new QueryClient();
 function App() {
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<string>('violet'); // Default theme
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
   // Apply theme to document body
   const applyTheme = (selectedTheme: string) => {
@@ -52,6 +53,17 @@ function App() {
     setTimeout(() => {
       document.body.classList.add('theme-transition');
     }, 100);
+
+    // Check authentication status
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+      try {
+        const parsed = JSON.parse(userData);
+        setIsAuthenticated(!!parsed.pin);
+      } catch (e) {
+        console.error("Error parsing user data:", e);
+      }
+    }
   }, []);
 
   return (
@@ -59,7 +71,7 @@ function App() {
       {loading && <GlitchLoader onComplete={() => setLoading(false)} />}
       
       <Router>
-        <div className="flex flex-col h-screen">
+        <div className="flex flex-col h-screen w-screen overflow-hidden">
           <TitleBar />
           
           <div className="flex flex-1 overflow-hidden">
@@ -73,7 +85,9 @@ function App() {
                   <Route path="/" element={<Index />} />
                   <Route path="/home" element={<HomePage />} />
                   <Route path="/search" element={<SearchPage />} />
-                  <Route path="/playlists" element={<PlaylistsPage />} />
+                  <Route path="/playlists" element={
+                    <PlaylistsPage isAuthRequired={!isAuthenticated} />
+                  } />
                   <Route path="/settings" element={<SettingsPage onThemeChange={applyTheme} currentTheme={theme} />} />
                   <Route path="/about" element={<AboutPage />} />
                   <Route path="*" element={<NotFound />} />

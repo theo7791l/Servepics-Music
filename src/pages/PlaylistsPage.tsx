@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import PlaylistCard from '@/components/PlaylistCard';
 import TrackList from '@/components/TrackList';
@@ -9,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { useNavigate } from 'react-router-dom';
 
 interface Playlist {
   id: string;
@@ -28,13 +28,18 @@ interface Track {
   videoId?: string;
 }
 
-const PlaylistsPage: React.FC = () => {
+interface PlaylistsPageProps {
+  isAuthRequired?: boolean;
+}
+
+const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthRequired = true }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState<boolean>(false);
   const [newPlaylistName, setNewPlaylistName] = useState<string>("");
+  const navigate = useNavigate();
   
   // Vérifier l'authentification et charger les playlists
   useEffect(() => {
@@ -55,8 +60,11 @@ const PlaylistsPage: React.FC = () => {
       } catch (e) {
         console.error("Error loading user data:", e);
       }
+    } else if (isAuthRequired) {
+      // Rediriger vers la page d'accueil si l'authentification est requise
+      navigate('/');
     }
-  }, []);
+  }, [navigate, isAuthRequired]);
   
   const handleAuthComplete = () => {
     setIsAuthenticated(true);
@@ -79,6 +87,20 @@ const PlaylistsPage: React.FC = () => {
     if (track.audioUrl) {
       setCurrentTrack(track);
       localStorage.setItem('currentTrack', JSON.stringify(track));
+      
+      // Mettre à jour la présence Discord si disponible
+      if (window.electron?.updateDiscordPresence) {
+        window.electron.updateDiscordPresence({
+          title: track.title,
+          artist: track.artist
+        });
+      }
+      
+      // Journal audio si disponible
+      if (window.electron?.logAudio) {
+        window.electron.logAudio(`Playing: ${track.title} by ${track.artist}`);
+      }
+      
       return;
     }
     
@@ -89,14 +111,19 @@ const PlaylistsPage: React.FC = () => {
           'https://invidious.fdn.fr',
           'https://y.com.sb',
           'https://invidious.slipfox.xyz',
-          'https://invidious.privacydev.net'
+          'https://invidious.privacydev.net',
+          'https://vid.puffyan.us',
+          'https://invidious.namazso.eu',
+          'https://inv.riverside.rocks'
         ];
         
         // Essayer chaque instance jusqu'à ce qu'une fonctionne
         for (const instance of invidiousInstances) {
           try {
             const url = `${instance}/api/v1/videos/${track.videoId}`;
-            const response = await fetch(url, { mode: 'cors' });
+            console.log(`Trying to fetch from: ${url}`);
+            
+            const response = await fetch(url);
             
             if (!response.ok) {
               throw new Error(`API returned status ${response.status}`);
@@ -138,6 +165,19 @@ const PlaylistsPage: React.FC = () => {
                     localStorage.setItem('userData', JSON.stringify(userData));
                   }
                 }
+              }
+              
+              // Mettre à jour Discord
+              if (window.electron?.updateDiscordPresence) {
+                window.electron.updateDiscordPresence({
+                  title: audioTrack.title,
+                  artist: audioTrack.artist
+                });
+              }
+              
+              // Journal audio
+              if (window.electron?.logAudio) {
+                window.electron.logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
               }
               
               // Stocker dans localStorage pour la persistance
@@ -230,12 +270,12 @@ const PlaylistsPage: React.FC = () => {
     });
   };
   
-  if (!isAuthenticated) {
+  if (!isAuthenticated && isAuthRequired) {
     return (
-      <div className="py-10 px-4">
+      <div className="py-10 px-4 search-container">
         <div className="max-w-screen-md mx-auto">
           <h1 className="font-audiowide text-3xl mb-8 glow text-primary-foreground text-center">
-            Bienvenue sur NeonWave
+            Bienvenue sur Servepics music
           </h1>
           <AuthForm onAuthComplete={handleAuthComplete} />
         </div>
@@ -244,7 +284,7 @@ const PlaylistsPage: React.FC = () => {
   }
   
   return (
-    <div className="py-4 px-4 pb-20">
+    <div className="py-4 px-4 pb-20 playlist-container">
       <div className="max-w-screen-xl mx-auto">
         <div className="mb-6 flex justify-between items-center">
           <h1 className="font-audiowide text-3xl glow text-primary-foreground">
@@ -363,9 +403,9 @@ const PlaylistsPage: React.FC = () => {
         
         {/* Dialog for creating new playlist */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent>
+          <DialogContent className="bg-background border-primary/20">
             <DialogHeader>
-              <DialogTitle className="font-audiowide text-xl">Créer une nouvelle playlist</DialogTitle>
+              <DialogTitle className="font-audiowide text-xl text-primary-foreground">Créer une nouvelle playlist</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div>
@@ -373,6 +413,7 @@ const PlaylistsPage: React.FC = () => {
                   placeholder="Nom de la playlist"
                   value={newPlaylistName}
                   onChange={(e) => setNewPlaylistName(e.target.value)}
+                  className="bg-muted/20 border-primary/30 text-foreground"
                 />
               </div>
             </div>
@@ -380,6 +421,7 @@ const PlaylistsPage: React.FC = () => {
               <Button
                 variant="outline"
                 onClick={() => setIsCreateDialogOpen(false)}
+                className="border-primary/30"
               >
                 Annuler
               </Button>
