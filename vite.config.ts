@@ -20,9 +20,16 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  // Ensure we don't use git dependencies
   optimizeDeps: {
     exclude: ['register-scheme']
+  },
+  // Add additional build options to handle problematic dependencies
+  build: {
+    rollupOptions: {
+      external: ['register-scheme'],
+    },
+    commonjsOptions: {
+      ignoreDynamicRequires: true
+    }
   }
 }));
-
