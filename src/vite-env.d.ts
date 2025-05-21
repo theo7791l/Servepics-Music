@@ -16,5 +16,3 @@ interface ElectronAPI {
 interface Window {
   electron?: ElectronAPI;
 }
-
-// No need for the nested interface declaration that was causing the issue

@@ -20,7 +20,6 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  // No need for special handling of register-scheme anymore
   build: {
     commonjsOptions: {
       ignoreDynamicRequires: true

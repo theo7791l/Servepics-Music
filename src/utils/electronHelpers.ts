@@ -81,4 +81,3 @@ export const closeWindow = (): void => {
     window.electron.close();
   }
 };
-
