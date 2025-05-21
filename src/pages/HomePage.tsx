@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SearchBar from '@/components/SearchBar';
@@ -7,6 +6,7 @@ import MusicPlayer from '@/components/MusicPlayer';
 import PlaylistCard from '@/components/PlaylistCard';
 import AuthForm from '@/components/AuthForm';
 import { toast } from "@/hooks/use-toast";
+import { logAudio, updateDiscordPresence } from '@/utils/electronHelpers';
 
 interface Track {
   id: string;
@@ -32,8 +32,9 @@ const invidiousInstances = [
   'https://invidious.slipfox.xyz',
   'https://invidious.privacydev.net',
   'https://vid.puffyan.us',
-  'https://invidious.namazso.eu',
-  'https://inv.riverside.rocks'
+  'https://inv.namazso.eu',     // Updated instance
+  'https://invidio.us',         // Added new instance
+  'https://yt.artemislena.eu'   // Added new instance
 ];
 
 const HomePage: React.FC = () => {
@@ -159,6 +160,12 @@ const HomePage: React.FC = () => {
     if (track.audioUrl) {
       setCurrentTrack(track);
       localStorage.setItem('currentTrack', JSON.stringify(track));
+      
+      // Update Discord presence
+      updateDiscordPresence(track.title, track.artist);
+      
+      // Log audio
+      logAudio(`Playing: ${track.title} by ${track.artist}`);
       return;
     }
     
@@ -197,18 +204,11 @@ const HomePage: React.FC = () => {
                         track.coverUrl
               };
               
-              // Mettre à jour Discord Rich Presence si disponible
-              if (window.electron?.updateDiscordPresence) {
-                window.electron.updateDiscordPresence({
-                  title: audioTrack.title,
-                  artist: audioTrack.artist
-                });
-              }
+              // Mettre à jour Discord Rich Presence
+              updateDiscordPresence(audioTrack.title, audioTrack.artist);
               
-              // Journal audio si disponible
-              if (window.electron?.logAudio) {
-                window.electron.logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
-              }
+              // Journal audio
+              logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
               
               // Stocker dans localStorage pour la persistance
               setCurrentTrack(audioTrack);

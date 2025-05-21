@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import TrackList from '@/components/TrackList';
 import MusicPlayer from '@/components/MusicPlayer';
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from 'react-router-dom';
+import { logAudio, updateDiscordPresence } from '@/utils/electronHelpers';
 
 // Types pour la réponse API Invidious
 interface InvidiousVideo {
@@ -213,18 +213,11 @@ const SearchPage: React.FC = () => {
                         track.coverUrl
               };
               
-              // Mettre à jour Discord Rich Presence si disponible
-              if (window.electron?.updateDiscordPresence) {
-                window.electron.updateDiscordPresence({
-                  title: audioTrack.title,
-                  artist: audioTrack.artist
-                });
-              }
+              // Mettre à jour Discord Rich Presence
+              updateDiscordPresence(audioTrack.title, audioTrack.artist);
               
-              // Journal audio si disponible
-              if (window.electron?.logAudio) {
-                window.electron.logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
-              }
+              // Journal audio
+              logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
               
               // Stocker dans localStorage pour la persistance
               localStorage.setItem('currentTrack', JSON.stringify(audioTrack));

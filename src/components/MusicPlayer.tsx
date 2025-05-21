@@ -20,9 +20,11 @@ interface MusicPlayerProps {
   onPrevious?: () => void;
 }
 
-// Define a typeguard function to check if electron features exist
-const hasElectronFeatures = (obj: any): boolean => {
-  return obj && typeof obj === 'object';
+/**
+ * Check if we're in an Electron environment and if specific electron features exist
+ */
+const isElectronEnvironment = (): boolean => {
+  return window.electron !== undefined;
 };
 
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
@@ -45,14 +47,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   // Envoyer les logs audio
   const logAudio = (message: string) => {
     console.log(`[AUDIO] ${message}`);
-    if (window.electron && hasElectronFeatures(window.electron) && window.electron.logAudio) {
+    if (isElectronEnvironment() && window.electron?.logAudio) {
       window.electron.logAudio(message);
     }
   };
   
   // Mettre à jour la présence Discord si disponible
   const updateDiscordPresence = (track: Track) => {
-    if (window.electron && hasElectronFeatures(window.electron) && window.electron.updateDiscordPresence) {
+    if (isElectronEnvironment() && window.electron?.updateDiscordPresence) {
       window.electron.updateDiscordPresence({
         title: track.title,
         artist: track.artist
@@ -190,7 +192,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       'https://y.com.sb',
       'https://invidious.slipfox.xyz',
       'https://invidious.privacydev.net',
-      'https://vid.puffyan.us'
+      'https://vid.puffyan.us',
+      'https://inv.namazso.eu',   // Updated instance
+      'https://invidio.us',       // Added new instance
+      'https://yt.artemislena.eu' // Added new instance
     ];
     
     // Essayer une instance alternative
@@ -311,6 +316,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         audioRef.current.load();
       }
       
+      // Handle browser autoplay restrictions gracefully
       const playPromise = audioRef.current.play();
       
       if (playPromise !== undefined) {
@@ -323,25 +329,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           .catch(error => {
             logAudio(`Manual play failed: ${error.message}`);
             
-            // Attempt with a different approach for browser autoplay restrictions
+            // Une approche spéciale pour les navigateurs qui bloquent l'autoplay
             if (error.name === 'NotAllowedError') {
               logAudio('Autoplay not allowed, trying a different approach');
               
-              // Try with a user interaction context
-              document.addEventListener('click', function playOnClick() {
-                if (audioRef.current) {
-                  audioRef.current.play()
-                    .then(() => {
-                      setIsPlaying(true);
-                      setAudioError(null);
-                      document.removeEventListener('click', playOnClick);
-                    })
-                    .catch(e => logAudio(`Play on click failed: ${e.message}`));
-                }
-                document.removeEventListener('click', playOnClick);
-              }, { once: true });
+              // Demander une interaction utilisateur pour débloquer l'audio
+              setAudioError("Cliquez sur le bouton play pour activer le son");
               
-              setAudioError("Cliquez n'importe où sur la page pour autoriser la lecture audio");
+              // Afficher un toast pour informer l'utilisateur
+              toast({
+                title: "Interaction requise",
+                description: "Cliquez sur play pour activer le son (restriction du navigateur)",
+                duration: 5000,
+              });
             } else {
               // Essayer une URL alternative si le lecteur n'arrive pas à jouer le fichier
               tryAlternativeUrl(currentTrack);

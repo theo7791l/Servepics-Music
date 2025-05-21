@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from 'react-router-dom';
+import { logAudio, updateDiscordPresence } from '@/utils/electronHelpers';
 
 interface Playlist {
   id: string;
@@ -88,18 +89,11 @@ const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthRequired = true }) 
       setCurrentTrack(track);
       localStorage.setItem('currentTrack', JSON.stringify(track));
       
-      // Mettre à jour la présence Discord si disponible
-      if (window.electron?.updateDiscordPresence) {
-        window.electron.updateDiscordPresence({
-          title: track.title,
-          artist: track.artist
-        });
-      }
+      // Mettre à jour la présence Discord
+      updateDiscordPresence(track.title, track.artist);
       
-      // Journal audio si disponible
-      if (window.electron?.logAudio) {
-        window.electron.logAudio(`Playing: ${track.title} by ${track.artist}`);
-      }
+      // Journal audio
+      logAudio(`Playing: ${track.title} by ${track.artist}`);
       
       return;
     }
@@ -168,17 +162,10 @@ const PlaylistsPage: React.FC<PlaylistsPageProps> = ({ isAuthRequired = true }) 
               }
               
               // Mettre à jour Discord
-              if (window.electron?.updateDiscordPresence) {
-                window.electron.updateDiscordPresence({
-                  title: audioTrack.title,
-                  artist: audioTrack.artist
-                });
-              }
+              updateDiscordPresence(audioTrack.title, audioTrack.artist);
               
               // Journal audio
-              if (window.electron?.logAudio) {
-                window.electron.logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
-              }
+              logAudio(`Playing: ${audioTrack.title} by ${audioTrack.artist}`);
               
               // Stocker dans localStorage pour la persistance
               setCurrentTrack(audioTrack);
