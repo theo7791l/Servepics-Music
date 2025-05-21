@@ -12,8 +12,9 @@ interface ElectronAPI {
   close?: () => void;
 }
 
-declare global {
-  interface Window {
-    electron?: ElectronAPI;
-  }
+// This resolves the TypeScript error by properly declaring the window.electron property
+interface Window {
+  electron?: ElectronAPI;
 }
+
+// No need for the nested interface declaration that was causing the issue
