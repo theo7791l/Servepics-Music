@@ -20,14 +20,8 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  optimizeDeps: {
-    exclude: ['register-scheme']
-  },
-  // Add additional build options to handle problematic dependencies
+  // No need for special handling of register-scheme anymore
   build: {
-    rollupOptions: {
-      external: ['register-scheme'],
-    },
     commonjsOptions: {
       ignoreDynamicRequires: true
     }

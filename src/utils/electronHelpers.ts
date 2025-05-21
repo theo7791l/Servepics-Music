@@ -1,6 +1,7 @@
 
 /**
  * Helper functions for Electron integration
+ * Note: We are not using the register-scheme package due to installation issues
  */
 
 /**
