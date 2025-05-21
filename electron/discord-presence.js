@@ -1,27 +1,63 @@
 
-const { ipcRenderer } = require('electron');
+// Simple Discord RPC integration
+const DiscordRPC = require('discord-rpc');
 
-// Fonction pour mettre à jour la présence Discord
-function updateDiscordPresence(trackInfo) {
-  ipcRenderer.send('update-presence', trackInfo);
+// Discord Application Client ID
+const clientId = '1234567890123456789'; // Replace with your actual Discord application client ID
+
+// Initialize RPC
+let rpc = null;
+let connected = false;
+
+// Setup Discord RPC
+function setupDiscordRPC() {
+  try {
+    // Create client
+    rpc = new DiscordRPC.Client({ transport: 'ipc' });
+    
+    // Register event handlers
+    rpc.on('ready', () => {
+      console.log('Discord RPC connected');
+      connected = true;
+      
+      // Set initial activity
+      setActivity({
+        title: "Music Player",
+        artist: "Idle"
+      });
+    });
+    
+    // Connect to Discord
+    rpc.login({ clientId }).catch(console.error);
+    
+    // Setup global handlers for RPC updates
+    global.updateDiscordPresence = (data) => {
+      setActivity(data);
+    };
+  } catch (error) {
+    console.error('Failed to initialize Discord RPC:', error);
+  }
 }
 
-// Rendre la fonction disponible globalement
-window.updateDiscordPresence = updateDiscordPresence;
+// Set Discord activity
+function setActivity(data = {}) {
+  if (!connected || !rpc) return;
+  
+  try {
+    const { title, artist } = data;
+    
+    rpc.setActivity({
+      details: title || 'Idle',
+      state: artist ? `by ${artist}` : 'Not playing',
+      largeImageKey: 'app_logo',
+      largeImageText: 'Music Player',
+      smallImageKey: 'play',
+      smallImageText: 'Playing',
+      instance: false,
+    }).catch(console.error);
+  } catch (error) {
+    console.error('Failed to set Discord activity:', error);
+  }
+}
 
-// Écouter les événements de lecture
-document.addEventListener('DOMContentLoaded', () => {
-  // Observer les changements dans le titre de la page pour détecter les changements de piste
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === 'childList' && document.title.includes('-')) {
-        const [artist, title] = document.title.split(' - ');
-        updateDiscordPresence({ title, artist });
-      }
-    }
-  });
-
-  observer.observe(document.querySelector('title'), {
-    childList: true
-  });
-});
+module.exports = { setupDiscordRPC };
