@@ -1,9 +1,16 @@
 
-// Utilitaires pour la gestion audio multi-environnement
+// Utilitaires pour la gestion audio multi-environnement avec codes d'erreur
+
+import { ErrorCode, createError, logError } from './errorCodes';
 
 interface AudioSource {
   url: string;
   type: 'direct' | 'proxy' | 'fallback';
+}
+
+interface AudioPlayerError extends Error {
+  code: ErrorCode;
+  details?: string;
 }
 
 /**
@@ -34,13 +41,26 @@ export const getCompatibleAudioUrl = async (videoId: string): Promise<AudioSourc
     'https://yt.artemislena.eu'
   ];
 
-  // Dans Electron, on peut utiliser les URLs directement
-  if (isElectronEnvironment()) {
-    return await getDirectAudioUrl(videoId, invidiousInstances);
-  }
+  try {
+    // Dans Electron, on peut utiliser les URLs directement
+    if (isElectronEnvironment()) {
+      console.log(`[AUDIO] Environment: Electron, trying direct access for video ${videoId}`);
+      return await getDirectAudioUrl(videoId, invidiousInstances);
+    }
 
-  // Dans le navigateur, on doit utiliser des alternatives
-  return await getBrowserCompatibleUrl(videoId);
+    // Dans le navigateur, essayer différentes approches
+    console.log(`[AUDIO] Environment: Browser, trying browser-compatible methods for video ${videoId}`);
+    return await getBrowserCompatibleUrl(videoId, invidiousInstances);
+  } catch (error) {
+    const appError = createError(
+      ErrorCode.AUDIO_SOURCE_UNAVAILABLE,
+      'Impossible de récupérer une source audio compatible',
+      error instanceof Error ? error.message : 'Unknown error',
+      { videoId, environment: isElectronEnvironment() ? 'electron' : 'browser' }
+    );
+    logError(appError);
+    return null;
+  }
 };
 
 /**
@@ -49,8 +69,19 @@ export const getCompatibleAudioUrl = async (videoId: string): Promise<AudioSourc
 const getDirectAudioUrl = async (videoId: string, instances: string[]): Promise<AudioSource | null> => {
   for (const instance of instances) {
     try {
+      console.log(`[AUDIO] Trying direct access from ${instance} for video ${videoId}`);
       const url = `${instance}/api/v1/videos/${videoId}`;
-      const response = await fetch(url);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      
+      const response = await fetch(url, { 
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'MusicApp/1.0'
+        }
+      });
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         throw new Error(`API returned status ${response.status}`);
@@ -59,17 +90,25 @@ const getDirectAudioUrl = async (videoId: string, instances: string[]): Promise<
       const data = await response.json();
       
       const audioFormats = data.adaptiveFormats
-        .filter((format: any) => format.type.startsWith('audio/'))
-        .sort((a: any, b: any) => b.bitrate - a.bitrate);
+        ?.filter((format: any) => format.type?.startsWith('audio/'))
+        ?.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
       
-      if (audioFormats.length > 0) {
+      if (audioFormats && audioFormats.length > 0) {
+        console.log(`[AUDIO] Direct audio URL found from ${instance}`);
         return {
           url: audioFormats[0].url,
           type: 'direct'
         };
       }
     } catch (error) {
-      console.warn(`Failed to get audio from ${instance}:`, error);
+      console.warn(`[AUDIO] Failed to get audio from ${instance}:`, error);
+      const appError = createError(
+        ErrorCode.API_INVIDIOUS_UNAVAILABLE,
+        `Instance ${instance} unavailable`,
+        error instanceof Error ? error.message : 'Unknown error',
+        { instance, videoId }
+      );
+      logError(appError);
     }
   }
   
@@ -77,23 +116,73 @@ const getDirectAudioUrl = async (videoId: string, instances: string[]): Promise<
 };
 
 /**
- * Récupère une URL compatible navigateur (avec proxy ou fallback)
+ * Récupère une URL compatible navigateur
  */
-const getBrowserCompatibleUrl = async (videoId: string): Promise<AudioSource | null> => {
-  // Option 1: Essayer avec un proxy CORS
+const getBrowserCompatibleUrl = async (videoId: string, instances: string[]): Promise<AudioSource | null> => {
+  // Méthode 1: Essayer les instances directement (certaines ont CORS activé)
+  for (const instance of instances) {
+    try {
+      console.log(`[AUDIO] Trying direct browser access from ${instance}`);
+      const url = `${instance}/api/v1/videos/${videoId}`;
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      
+      const response = await fetch(url, { 
+        signal: controller.signal,
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const audioFormats = data.adaptiveFormats
+          ?.filter((format: any) => format.type?.startsWith('audio/'))
+          ?.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+        
+        if (audioFormats && audioFormats.length > 0) {
+          console.log(`[AUDIO] Browser-compatible URL found from ${instance}`);
+          return {
+            url: audioFormats[0].url,
+            type: 'direct'
+          };
+        }
+      }
+    } catch (error) {
+      console.warn(`[AUDIO] Browser access failed for ${instance}:`, error);
+      
+      // Si c'est une erreur CORS, on le note spécifiquement
+      if (error instanceof Error && error.message.includes('CORS')) {
+        const appError = createError(
+          ErrorCode.AUDIO_CORS_BLOCKED,
+          'CORS blocked browser access',
+          error.message,
+          { instance, videoId }
+        );
+        logError(appError);
+      }
+    }
+  }
+
+  // Méthode 2: Essayer avec un proxy CORS (dernière option)
   try {
+    console.log(`[AUDIO] Trying CORS proxy for video ${videoId}`);
     const corsProxy = 'https://api.allorigins.win/raw?url=';
-    const invidiousUrl = `https://invidious.fdn.fr/api/v1/videos/${videoId}`;
+    const invidiousUrl = `https://y.com.sb/api/v1/videos/${videoId}`;
     const proxiedUrl = corsProxy + encodeURIComponent(invidiousUrl);
     
     const response = await fetch(proxiedUrl);
     if (response.ok) {
       const data = await response.json();
       const audioFormats = data.adaptiveFormats
-        .filter((format: any) => format.type.startsWith('audio/'))
-        .sort((a: any, b: any) => b.bitrate - a.bitrate);
+        ?.filter((format: any) => format.type?.startsWith('audio/'))
+        ?.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
       
-      if (audioFormats.length > 0) {
+      if (audioFormats && audioFormats.length > 0) {
+        console.log(`[AUDIO] Proxy URL found for video ${videoId}`);
         return {
           url: corsProxy + encodeURIComponent(audioFormats[0].url),
           type: 'proxy'
@@ -101,11 +190,25 @@ const getBrowserCompatibleUrl = async (videoId: string): Promise<AudioSource | n
       }
     }
   } catch (error) {
-    console.warn('Proxy method failed:', error);
+    console.warn('[AUDIO] Proxy method failed:', error);
+    const appError = createError(
+      ErrorCode.AUDIO_NETWORK_ERROR,
+      'Proxy method failed',
+      error instanceof Error ? error.message : 'Unknown error',
+      { videoId }
+    );
+    logError(appError);
   }
 
-  // Option 2: Fallback avec un service alternatif ou message d'erreur
-  console.warn('No compatible audio source found for browser environment');
+  // Aucune méthode n'a fonctionné
+  const appError = createError(
+    ErrorCode.BROWSER_COMPATIBILITY,
+    'No compatible audio source found for browser environment',
+    'All methods failed to retrieve audio URL',
+    { videoId, environment: 'browser' }
+  );
+  logError(appError);
+  
   return null;
 };
 
@@ -114,9 +217,18 @@ const getBrowserCompatibleUrl = async (videoId: string): Promise<AudioSource | n
  */
 export const testAudioUrl = async (url: string): Promise<boolean> => {
   try {
-    const response = await fetch(url, { method: 'HEAD' });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(url, { 
+      method: 'HEAD',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    
     return response.ok;
-  } catch {
+  } catch (error) {
+    console.warn('[AUDIO] URL test failed:', error);
     return false;
   }
 };

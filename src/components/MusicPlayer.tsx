@@ -3,6 +3,7 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, Repeat, Shuffle } from 'lu
 import { Slider } from "@/components/ui/slider";
 import { toast } from '@/hooks/use-toast';
 import { getCompatibleAudioUrl, isElectronEnvironment } from '@/utils/audioPlayer';
+import { ErrorCode, createError, logError, getErrorMessage } from '@/utils/errorCodes';
 import BrowserCompatibilityWarning from './BrowserCompatibilityWarning';
 
 interface Track {
@@ -32,8 +33,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const [isShuffle, setIsShuffle] = useState(false);
   const [isRepeat, setIsRepeat] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<ErrorCode | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
   const [showBrowserWarning, setShowBrowserWarning] = useState(!isElectronEnvironment());
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -58,30 +59,56 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }
   };
   
+  const handleAudioError = (code: ErrorCode, message: string, details?: string) => {
+    const error = createError(code, message, details, { 
+      track: currentTrack?.title,
+      environment: isElectronEnvironment() ? 'electron' : 'browser'
+    });
+    logError(error);
+    setErrorCode(code);
+    setAudioError(`[${code}] ${getErrorMessage(code)}`);
+    setIsPlaying(false);
+    setAudioLoading(false);
+  };
+
   const createAudioElement = (): HTMLAudioElement => {
     const audio = new Audio();
     
     audio.addEventListener('error', (e) => {
       const error = (e.target as HTMLAudioElement).error;
-      logAudio(`Error event triggered: ${error?.code} - ${error?.message}`);
-      setAudioError(`Erreur de lecture audio (${error?.code}). Essayez un autre titre.`);
-      setIsPlaying(false);
-      setAudioLoading(false);
+      const errorMessage = error?.message || 'Unknown audio error';
+      logAudio(`Audio error event: ${error?.code} - ${errorMessage}`);
+      
+      // Mapper les codes d'erreur HTML5 vers nos codes
+      let code = ErrorCode.AUDIO_PLAYBACK_FAILED;
+      if (error?.code === MediaError.MEDIA_ERR_NETWORK) {
+        code = ErrorCode.AUDIO_NETWORK_ERROR;
+      } else if (error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+        code = ErrorCode.AUDIO_FORMAT_UNSUPPORTED;
+      }
+      
+      handleAudioError(code, 'Audio playback failed', errorMessage);
     });
     
     audio.addEventListener('loadstart', () => {
       logAudio('Audio loading started');
       setAudioLoading(true);
+      setAudioError(null);
+      setErrorCode(null);
     });
     
     audio.addEventListener('loadeddata', () => {
-      logAudio('Audio data loaded');
+      logAudio('Audio data loaded successfully');
       setAudioLoading(false);
     });
     
     audio.addEventListener('canplay', () => {
-      logAudio('Audio can play');
+      logAudio('Audio ready to play');
       setAudioLoading(false);
+    });
+    
+    audio.addEventListener('loadedmetadata', () => {
+      logAudio(`Audio metadata loaded - Duration: ${audio.duration}s`);
     });
     
     audio.crossOrigin = "anonymous";
@@ -96,7 +123,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }
     
     return () => {
-      // Clean up audio element when component unmounts
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
@@ -115,15 +141,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     
     // Reset states
     setAudioError(null);
+    setErrorCode(null);
     setAudioLoading(true);
     setProgress(0);
-    setRetryCount(0);
     
     // Récupérer l'URL audio compatible avec l'environnement
-    getCompatibleAudioUrl(currentTrack.videoId)
-      .then(audioSource => {
+    const loadAudio = async () => {
+      try {
+        const audioSource = await getCompatibleAudioUrl(currentTrack.videoId!);
+        
         if (!audioSource || !audioRef.current) {
-          throw new Error('No compatible audio source found');
+          handleAudioError(
+            ErrorCode.AUDIO_SOURCE_UNAVAILABLE,
+            'No compatible audio source found',
+            `Failed to get audio URL for video ${currentTrack.videoId}`
+          );
+          return;
         }
         
         logAudio(`Got compatible audio URL: ${audioSource.url} (type: ${audioSource.type})`);
@@ -136,9 +169,10 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         // Update Discord presence
         updateDiscordPresence(currentTrack);
         
-        // Attempt to play
+        // Attempt to load and play
         audioRef.current.load();
         
+        // Attendre que l'audio soit prêt avant de jouer
         const playPromise = audioRef.current.play();
         
         if (playPromise !== undefined) {
@@ -147,30 +181,45 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
               logAudio('Playback started successfully');
               setIsPlaying(true);
               setAudioError(null);
+              setErrorCode(null);
               setAudioLoading(false);
             })
             .catch(error => {
               logAudio(`Playback failed: ${error.message}`);
-              setIsPlaying(false);
-              setAudioLoading(false);
               
-              if (!isElectronEnvironment()) {
-                setAudioError("Lecture limitée dans le navigateur. Utilisez l'app Electron pour une expérience complète.");
+              if (error.name === 'NotAllowedError') {
+                handleAudioError(
+                  ErrorCode.BROWSER_AUTOPLAY_BLOCKED,
+                  'Autoplay blocked by browser',
+                  error.message
+                );
+              } else if (!isElectronEnvironment()) {
+                handleAudioError(
+                  ErrorCode.BROWSER_COMPATIBILITY,
+                  'Browser compatibility issue',
+                  error.message
+                );
               } else {
-                setAudioError("Erreur de lecture. Essayez un autre titre.");
+                handleAudioError(
+                  ErrorCode.AUDIO_PLAYBACK_FAILED,
+                  'Audio playback failed',
+                  error.message
+                );
               }
             });
         }
-      })
-      .catch(error => {
-        logAudio(`Error getting compatible audio URL: ${error}`);
-        setAudioError(!isElectronEnvironment() 
-          ? "Lecture audio non disponible dans le navigateur web" 
-          : "Erreur lors de la configuration de l'audio"
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logAudio(`Error getting compatible audio URL: ${errorMessage}`);
+        handleAudioError(
+          ErrorCode.AUDIO_SOURCE_UNAVAILABLE,
+          'Failed to get audio source',
+          errorMessage
         );
-        setIsPlaying(false);
-        setAudioLoading(false);
-      });
+      }
+    };
+    
+    loadAudio();
   }, [currentTrack, volume]);
 
   // Start/stop progress tracking based on play state
@@ -219,17 +268,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     if (!currentTrack || !currentTrack.videoId) {
       toast({
         title: "Erreur de lecture",
-        description: "Aucun titre audio disponible",
-        variant: "destructive",
-        duration: 3000,
-      });
-      return;
-    }
-    
-    if (!isElectronEnvironment()) {
-      toast({
-        title: "Limitation du navigateur",
-        description: "La lecture audio est limitée dans le navigateur web",
+        description: `[${ErrorCode.AUDIO_SOURCE_UNAVAILABLE}] Aucun titre audio disponible`,
         variant: "destructive",
         duration: 3000,
       });
@@ -237,17 +276,16 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     }
     
     if (isPlaying) {
-      logAudio('Playback paused');
+      logAudio('Playback paused by user');
       audioRef.current?.pause();
       setIsPlaying(false);
     } else {
-      logAudio('Attempting to play');
+      logAudio('User attempting to play');
       
       if (!audioRef.current) {
         audioRef.current = createAudioElement();
       }
       
-      // Handle browser autoplay restrictions gracefully
       const playPromise = audioRef.current.play();
       
       if (playPromise !== undefined) {
@@ -255,20 +293,29 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           .then(() => {
             logAudio('Manual play successful');
             setAudioError(null);
+            setErrorCode(null);
             setIsPlaying(true);
           })
           .catch(error => {
             logAudio(`Manual play failed: ${error.message}`);
             
             if (error.name === 'NotAllowedError') {
-              setAudioError("Cliquez sur le bouton play pour activer le son");
+              handleAudioError(
+                ErrorCode.BROWSER_AUTOPLAY_BLOCKED,
+                'User interaction required',
+                error.message
+              );
               toast({
                 title: "Interaction requise",
-                description: "Cliquez sur play pour activer le son (restriction du navigateur)",
+                description: `[${ErrorCode.BROWSER_AUTOPLAY_BLOCKED}] Cliquez sur play pour activer le son`,
                 duration: 5000,
               });
             } else {
-              setAudioError("Erreur de lecture audio");
+              handleAudioError(
+                ErrorCode.AUDIO_PLAYBACK_FAILED,
+                'Playback failed',
+                error.message
+              );
             }
           });
       }
@@ -341,14 +388,19 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       )}
       
       {audioError && (
-        <div className="absolute top-0 left-0 right-0 bg-destructive/80 text-white text-center py-1 text-xs rounded-t-xl">
-          {audioError}
+        <div className="absolute top-0 left-0 right-0 bg-destructive/90 text-white text-center py-2 text-xs rounded-t-xl z-10">
+          <div className="font-mono">{audioError}</div>
+          {errorCode && (
+            <div className="text-xs opacity-75 mt-1">
+              Code: {errorCode} | Env: {isElectronEnvironment() ? 'Electron' : 'Browser'}
+            </div>
+          )}
         </div>
       )}
       
       {audioLoading && (
-        <div className="absolute top-0 left-0 right-0 bg-primary/60 text-white text-center py-1 text-xs rounded-t-xl">
-          Chargement audio...
+        <div className="absolute top-0 left-0 right-0 bg-primary/60 text-white text-center py-1 text-xs rounded-t-xl z-10">
+          Chargement audio... {currentTrack.videoId && `(${currentTrack.videoId})`}
         </div>
       )}
       
@@ -388,7 +440,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
             <button 
               onClick={togglePlay}
               className="p-3 bg-primary rounded-full btn-glow text-primary-foreground hover:bg-primary/80 transition-all"
-              disabled={!currentTrack.audioUrl || audioLoading}
+              disabled={!currentTrack.videoId || audioLoading}
             >
               {isPlaying ? <Pause size={24} /> : <Play size={24} />}
             </button>
