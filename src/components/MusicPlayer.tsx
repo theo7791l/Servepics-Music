@@ -1,8 +1,9 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Repeat, Shuffle } from 'lucide-react';
 import { Slider } from "@/components/ui/slider";
 import { toast } from '@/hooks/use-toast';
+import { getCompatibleAudioUrl, isElectronEnvironment } from '@/utils/audioPlayer';
+import BrowserCompatibilityWarning from './BrowserCompatibilityWarning';
 
 interface Track {
   id: string;
@@ -20,13 +21,6 @@ interface MusicPlayerProps {
   onPrevious?: () => void;
 }
 
-/**
- * Check if we're in an Electron environment and if specific electron features exist
- */
-const isElectronEnvironment = (): boolean => {
-  return window.electron !== undefined;
-};
-
 const MusicPlayer: React.FC<MusicPlayerProps> = ({ 
   currentTrack, 
   onNext = () => {}, 
@@ -40,6 +34,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const [audioError, setAudioError] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [showBrowserWarning, setShowBrowserWarning] = useState(!isElectronEnvironment());
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -93,7 +88,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     audio.preload = "auto";
     return audio;
   };
-  
+
   // Setup audio element when component mounts
   useEffect(() => {
     if (!audioRef.current) {
@@ -109,14 +104,14 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       }
     };
   }, []);
-  
+
   // Update audio source when track changes
   useEffect(() => {
-    if (!currentTrack || !currentTrack.audioUrl || !audioRef.current) {
+    if (!currentTrack || !currentTrack.videoId || !audioRef.current) {
       return;
     }
     
-    logAudio(`Setting new track: ${currentTrack.title} - URL: ${currentTrack.audioUrl}`);
+    logAudio(`Setting new track: ${currentTrack.title} - Video ID: ${currentTrack.videoId}`);
     
     // Reset states
     setAudioError(null);
@@ -124,126 +119,60 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
     setProgress(0);
     setRetryCount(0);
     
-    try {
-      // Set audio source and options
-      audioRef.current.src = currentTrack.audioUrl;
-      audioRef.current.volume = volume / 100;
-      audioRef.current.crossOrigin = "anonymous";
-      
-      // Update Discord presence
-      updateDiscordPresence(currentTrack);
-      
-      // Attempt to play
-      audioRef.current.load();
-      
-      const playPromise = audioRef.current.play();
-      
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            logAudio('Playback started successfully');
-            setIsPlaying(true);
-            setAudioError(null);
-          })
-          .catch(error => {
-            logAudio(`Initial playback failed: ${error.message}`);
-            
-            // Try alternative approach with timeout
-            setTimeout(() => {
-              if (audioRef.current) {
-                audioRef.current.play()
-                  .then(() => {
-                    logAudio('Delayed play successful');
-                    setIsPlaying(true);
-                    setAudioError(null);
-                  })
-                  .catch(err => {
-                    logAudio(`All playback attempts failed: ${err.message}`);
-                    setIsPlaying(false);
-                    
-                    // Essayer avec une URL alternative
-                    tryAlternativeUrl(currentTrack);
-                  });
-              }
-            }, 1000);
-          });
-      }
-    } catch (error) {
-      logAudio(`Error setting track: ${error}`);
-      setAudioError("Erreur lors de la configuration de l'audio. Vérifiez l'URL audio.");
-      setIsPlaying(false);
-      setAudioLoading(false);
-      
-      // Essayer avec une URL alternative
-      tryAlternativeUrl(currentTrack);
-    }
-  }, [currentTrack, volume]);
-  
-  // Fonction pour essayer des URL alternatives
-  const tryAlternativeUrl = (track: Track) => {
-    if (retryCount >= 3 || !track.videoId) return; // Limite de 3 tentatives
-    
-    setRetryCount(prev => prev + 1);
-    logAudio(`Trying alternative URL attempt ${retryCount + 1} for ${track.videoId}`);
-    
-    // Liste d'instances Invidious alternatives
-    const instances = [
-      'https://invidious.fdn.fr',
-      'https://y.com.sb',
-      'https://invidious.slipfox.xyz',
-      'https://invidious.privacydev.net',
-      'https://vid.puffyan.us',
-      'https://inv.namazso.eu',   // Updated instance
-      'https://invidio.us',       // Added new instance
-      'https://yt.artemislena.eu' // Added new instance
-    ];
-    
-    // Essayer une instance alternative
-    const instance = instances[retryCount % instances.length];
-    const audioApiUrl = `${instance}/api/v1/videos/${track.videoId}`;
-    
-    fetch(audioApiUrl)
-      .then(response => {
-        if (!response.ok) throw new Error('API response not OK');
-        return response.json();
-      })
-      .then(data => {
-        const audioFormats = data.adaptiveFormats
-          .filter((format: any) => format.type.startsWith('audio/'))
-          .sort((a: any, b: any) => b.bitrate - a.bitrate);
+    // Récupérer l'URL audio compatible avec l'environnement
+    getCompatibleAudioUrl(currentTrack.videoId)
+      .then(audioSource => {
+        if (!audioSource || !audioRef.current) {
+          throw new Error('No compatible audio source found');
+        }
         
-        if (audioFormats.length > 0) {
-          const newUrl = audioFormats[0].url;
-          logAudio(`Found alternative audio URL: ${newUrl}`);
-          
-          if (audioRef.current) {
-            audioRef.current.src = newUrl;
-            audioRef.current.load();
-            audioRef.current.play()
-              .then(() => {
-                logAudio('Alternative URL playback successful');
-                setIsPlaying(true);
-                setAudioError(null);
-                
-                // Mettre à jour l'URL du morceau
-                const updatedTrack = { ...track, audioUrl: newUrl };
-                localStorage.setItem('currentTrack', JSON.stringify(updatedTrack));
-              })
-              .catch(err => {
-                logAudio(`Alternative URL playback failed: ${err.message}`);
-                setAudioError("Erreur lors de la lecture. Essayez un autre titre.");
-              });
-          }
-        } else {
-          throw new Error('No audio formats found');
+        logAudio(`Got compatible audio URL: ${audioSource.url} (type: ${audioSource.type})`);
+        
+        // Set audio source and options
+        audioRef.current.src = audioSource.url;
+        audioRef.current.volume = volume / 100;
+        audioRef.current.crossOrigin = "anonymous";
+        
+        // Update Discord presence
+        updateDiscordPresence(currentTrack);
+        
+        // Attempt to play
+        audioRef.current.load();
+        
+        const playPromise = audioRef.current.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              logAudio('Playback started successfully');
+              setIsPlaying(true);
+              setAudioError(null);
+              setAudioLoading(false);
+            })
+            .catch(error => {
+              logAudio(`Playback failed: ${error.message}`);
+              setIsPlaying(false);
+              setAudioLoading(false);
+              
+              if (!isElectronEnvironment()) {
+                setAudioError("Lecture limitée dans le navigateur. Utilisez l'app Electron pour une expérience complète.");
+              } else {
+                setAudioError("Erreur de lecture. Essayez un autre titre.");
+              }
+            });
         }
       })
       .catch(error => {
-        logAudio(`Failed to get alternative URL: ${error.message}`);
-        setAudioError("Impossible de lire ce titre. Essayez-en un autre.");
+        logAudio(`Error getting compatible audio URL: ${error}`);
+        setAudioError(!isElectronEnvironment() 
+          ? "Lecture audio non disponible dans le navigateur web" 
+          : "Erreur lors de la configuration de l'audio"
+        );
+        setIsPlaying(false);
+        setAudioLoading(false);
       });
-  };
-  
+  }, [currentTrack, volume]);
+
   // Start/stop progress tracking based on play state
   useEffect(() => {
     if (isPlaying) {
@@ -277,7 +206,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       }
     };
   }, [isPlaying, isRepeat, onNext]);
-  
+
   // Update volume when slider changes
   useEffect(() => {
     if (audioRef.current) {
@@ -285,12 +214,22 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       logAudio(`Volume changed to ${volume}%`);
     }
   }, [volume]);
-  
+
   const togglePlay = () => {
-    if (!currentTrack || !currentTrack.audioUrl) {
+    if (!currentTrack || !currentTrack.videoId) {
       toast({
         title: "Erreur de lecture",
         description: "Aucun titre audio disponible",
+        variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+    
+    if (!isElectronEnvironment()) {
+      toast({
+        title: "Limitation du navigateur",
+        description: "La lecture audio est limitée dans le navigateur web",
         variant: "destructive",
         duration: 3000,
       });
@@ -308,14 +247,6 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
         audioRef.current = createAudioElement();
       }
       
-      // Vérifier si l'audio est déjà chargé
-      if (!audioRef.current.src || audioRef.current.src !== currentTrack.audioUrl) {
-        logAudio('Setting new audio source before playing');
-        audioRef.current.src = currentTrack.audioUrl;
-        audioRef.current.volume = volume / 100;
-        audioRef.current.load();
-      }
-      
       // Handle browser autoplay restrictions gracefully
       const playPromise = audioRef.current.play();
       
@@ -329,36 +260,21 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
           .catch(error => {
             logAudio(`Manual play failed: ${error.message}`);
             
-            // Une approche spéciale pour les navigateurs qui bloquent l'autoplay
             if (error.name === 'NotAllowedError') {
-              logAudio('Autoplay not allowed, trying a different approach');
-              
-              // Demander une interaction utilisateur pour débloquer l'audio
               setAudioError("Cliquez sur le bouton play pour activer le son");
-              
-              // Afficher un toast pour informer l'utilisateur
               toast({
                 title: "Interaction requise",
                 description: "Cliquez sur play pour activer le son (restriction du navigateur)",
                 duration: 5000,
               });
             } else {
-              // Essayer une URL alternative si le lecteur n'arrive pas à jouer le fichier
-              tryAlternativeUrl(currentTrack);
-              
-              toast({
-                title: "Tentative de lecture alternative",
-                description: "Recherche d'une source audio alternative...",
-                duration: 3000,
-              });
+              setAudioError("Erreur de lecture audio");
             }
           });
-      } else {
-        logAudio('Play returned undefined promise');
       }
     }
   };
-  
+
   const handleProgressChange = (values: number[]) => {
     if (!audioRef.current || !currentTrack) return;
     
@@ -404,7 +320,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       </div>
     );
   };
-  
+
   // If no track is playing, show placeholder
   if (!currentTrack) {
     return (
@@ -418,16 +334,15 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   
   return (
     <div className="relative bg-muted/20 rounded-xl border border-primary/20 p-4 backdrop-blur-sm">
+      {showBrowserWarning && (
+        <div className="mb-4">
+          <BrowserCompatibilityWarning onClose={() => setShowBrowserWarning(false)} />
+        </div>
+      )}
+      
       {audioError && (
         <div className="absolute top-0 left-0 right-0 bg-destructive/80 text-white text-center py-1 text-xs rounded-t-xl">
           {audioError}
-          <button 
-            onClick={() => tryAlternativeUrl(currentTrack)} 
-            className="ml-2 underline"
-            disabled={retryCount >= 3}
-          >
-            Réessayer
-          </button>
         </div>
       )}
       
