@@ -35,7 +35,8 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webSecurity: false
     },
     frame: false,
     titleBarStyle: 'hidden',
@@ -85,7 +86,9 @@ ipcMain.on('audio-log', (event, message) => {
 
 ipcMain.on('update-discord-presence', (event, data) => {
   log(`[DISCORD] Updating presence: ${data.title} - ${data.artist}`);
-  // Discord presence logic is handled in discord-presence.js
+  if (global.updateDiscordPresence) {
+    global.updateDiscordPresence(data);
+  }
 });
 
 // Handle URL opening requests from renderer

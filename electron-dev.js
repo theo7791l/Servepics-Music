@@ -13,16 +13,25 @@ function startElectron() {
     path.join(__dirname, 'electron/main.js')
   ];
 
-  // Ajout de la variable d'environnement pour le mode développement
+  // Variables d'environnement pour le mode développement
   const env = Object.assign({}, process.env, {
     NODE_ENV: 'development',
     ELECTRON_START_URL: 'http://localhost:8080'
   });
 
-  electronProcess = spawn(electronPath, args, { stdio: 'inherit', env });
+  electronProcess = spawn(electronPath, args, { 
+    stdio: 'inherit', 
+    env,
+    shell: process.platform === 'win32'
+  });
 
-  electronProcess.on('close', () => {
+  electronProcess.on('close', (code) => {
+    console.log(`Electron process exited with code ${code}`);
     if (!manualRestart) process.exit();
+  });
+
+  electronProcess.on('error', (err) => {
+    console.error('Failed to start Electron process:', err);
   });
 }
 
